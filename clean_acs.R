@@ -39,3 +39,5 @@ acs_data <- acs_data %>% group_by(serialno = as.factor(serialno)) %>%
             weight = weight[1])
 
 head(acs_data)
+
+# hi
