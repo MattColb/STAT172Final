@@ -62,7 +62,7 @@ cps_data <- cps %>% group_by(CPSID=as.factor(CPSID)) %>%
     married = sum(MARRIED)
   ) %>% ungroup()
 
-#Non-included variables:
+#Non-included variables (Not in ACS):
 #EMPSTAT, DIFFANY, VETSTAT
 
 head(cps_data)
@@ -157,7 +157,20 @@ ggplot(data=filter(cps_data, kids==0)) +
 
 #FOCUS Y VARIABLES:
 #FSWROUTY
-#Binary snap no snap
+#Binary snap no snap FSSTMPVALC
 #FSFOODS
 
-#FORWARD REGRESSION:
+#FORWARD REGRESSION (IMPROVE):
+remove_na = filter(cps_data, !is.na(cps_data$FSWROUTY))
+
+m1 = glm(FSWROUTY ~ hhsize + married + education + elderly + kids + black + hispanic + female,
+         data=remove_na,
+         weights = weight,
+         family = binomial(link="logit"))
+m0 = glm(FSWROUTY ~ 1,
+         data=remove_na,
+         weights = weight,
+         family = binomial(link="logit"))
+
+v1 = step(m0, scope=list(lower = m0, upper=m1, direction="both"))
+summary(v1)
