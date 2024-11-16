@@ -156,9 +156,9 @@ ggplot(data=filter(cps_data, kids==0)) +
 #hhsize, married, education, elderly, kids, black, hispanic, female, county(?)
 
 #FOCUS Y VARIABLES:
-#FSWROUTY
-#Binary snap no snap FSSTMPVALC
-#FSFOODS
+#FSWROUTY - Phuong
+#Binary snap no snap FSSTMPVALC - Matt
+#FSFOODS - Aria
 
 #FORWARD REGRESSION (IMPROVE):
 remove_na = filter(cps_data, !is.na(cps_data$FSWROUTY))
