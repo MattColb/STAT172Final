@@ -11,6 +11,8 @@ library(haven)
 cps <- read.csv("./data/cps_00005.csv")
 head(cps[,c("CPSID","PERNUM", "FSSTATUS", "FSSTATUSMD", "RACE","EDUC")]) %>% kable
 
+#https://cps.ipums.org/cps-action/variables/search
+
 summary(cps)
 
 #map_chr(cps, ~attr(.x, "label")) %>% 
@@ -19,7 +21,7 @@ summary(cps)
 
 cps <- cps %>% mutate(SEX = SEX-1,
                       CHILD = ifelse(AGE < 18, 1, 0),
-                      ELDERLY = ifelse(AGE > 64, 1, 0),
+                      ELDERLY = ifelse(AGE > 59, 1, 0),
                       BLACK = ifelse(RACE==200, 1, 0),
                       HISPANIC = ifelse(HISPAN>0,1,0),
                       EDUC = as.integer(EDUC %in% c(91 ,92, 111, 123, 124, 125)),
@@ -59,6 +61,9 @@ cps_data <- cps %>% group_by(CPSID=as.factor(CPSID)) %>%
     education = sum(EDUC),
     married = sum(MARRIED)
   ) %>% ungroup()
+
+#Non-included variables:
+#EMPSTAT, DIFFANY, VETSTAT
 
 head(cps_data)
 sum(cps_data$hhsize)
@@ -127,6 +132,11 @@ head(cps_data)
 #https://cps.ipums.org/cps-action/variables/FSTOTXPNC#description_section
 #FSTOTXPNC indicates the total amount the household spent on food last week.
 
+#VETSTAT:
+#VETSTAT is a dichotomous variable identifying veterans, that is, persons who served in the military 
+#forces of the United States (Army, Navy, Air Force, Marine Corps, or Coast Guard) 
+#in time of war or peace, but who were not in the armed forces at the time of the survey. 
+
 ggplot(data=cps_data) + 
   geom_point(aes(x=hhsize, y=FSTOTXPNC_perpers))
 
@@ -142,4 +152,12 @@ ggplot(data=cps_data, aes(x=kids, y=hhsize)) +
 ggplot(data=filter(cps_data, kids==0)) + 
   geom_point(aes(x=hhsize, y=FSTOTXPNC_perpers))
 
+#PREDICTIVE VARIABLES
+#hhsize, married, education, elderly, kids, black, hispanic, female, county(?)
 
+#FOCUS Y VARIABLES:
+#FSWROUTY
+#Binary snap no snap
+#FSFOODS
+
+#FORWARD REGRESSION:
