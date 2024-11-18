@@ -49,6 +49,7 @@ cps_data <- cps %>% group_by(CPSID=as.factor(CPSID)) %>%
     FSBAL = first(FSBAL),
     FSRAWSCRA = first(FSRAWSCRA),
     FSTOTXPNC = first(FSTOTXPNC),
+    FSSTMPVALC = first(FSSTMPVALC),
     #FSSTATUS = first(FSSTATUS),
     
     #FSTMPVALC, FSRAWSCRM, 
@@ -75,15 +76,17 @@ cps_data <- cps_data %>%
          FSWROUTY = ifelse(FSWROUTY %in% c(96,97,98,99), NA, FSWROUTY),
          FSBAL = ifelse(FSBAL %in% c(96,97,98,99), NA, FSBAL),
          FSRAWSCRA = ifelse(FSRAWSCRA %in% c(98,99), NA, FSRAWSCRA),
-         FSTOTXPNC = ifelse(FSTOTXPNC %in% c(999), NA, FSTOTXPNC)) %>% #The 1000 wasn't in given code, but was always an outlier
+         FSTOTXPNC = ifelse(FSTOTXPNC %in% c(999), NA, FSTOTXPNC),
+         FSSTMPVALC = ifelse(FSSTMPVALC %in% c(996, 997, 998, 999), NA, FSSTMPVALC)) %>% #The 1000 wasn't in given code, but was always an outlier
   mutate(FSSTATUS = ifelse(FSSTATUS > 1, 1, 0),
          FSSTATUSMD = ifelse(FSSTATUSMD >1, 1, 0),
          FSFOODS = ifelse(FSFOODS > 1, 1, 0),
          FSWROUTY = ifelse(FSWROUTY > 1, 1, 0),
          FSBAL = ifelse(FSBAL > 1, 1, 0),
          FSRAWSCRA = ifelse(FSRAWSCRA >1, 1, 0),
-         FSTOTXPNC_perpers = ifelse(is.na(FSTOTXPNC), NA, FSTOTXPNC_perpers)
-  ) #Are these really how we should be handling these variables?
+         FSTOTXPNC_perpers = ifelse(is.na(FSTOTXPNC), NA, FSTOTXPNC_perpers),
+         FSSSTMPVALC_bin = ifelse()
+  )
 
 
 
@@ -132,11 +135,6 @@ head(cps_data)
 #https://cps.ipums.org/cps-action/variables/FSTOTXPNC#description_section
 #FSTOTXPNC indicates the total amount the household spent on food last week.
 
-#VETSTAT:
-#VETSTAT is a dichotomous variable identifying veterans, that is, persons who served in the military 
-#forces of the United States (Army, Navy, Air Force, Marine Corps, or Coast Guard) 
-#in time of war or peace, but who were not in the armed forces at the time of the survey. 
-
 ggplot(data=cps_data) + 
   geom_point(aes(x=hhsize, y=FSTOTXPNC_perpers))
 
@@ -159,6 +157,8 @@ ggplot(data=filter(cps_data, kids==0)) +
 #FSWROUTY - Phuong
 #Binary snap no snap FSSTMPVALC - Matt
 #FSFOODS - Aria
+
+
 
 #FORWARD REGRESSION (IMPROVE):
 remove_na = filter(cps_data, !is.na(cps_data$FSWROUTY))
