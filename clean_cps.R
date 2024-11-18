@@ -85,7 +85,7 @@ cps_data <- cps_data %>%
          FSBAL = ifelse(FSBAL > 1, 1, 0),
          FSRAWSCRA = ifelse(FSRAWSCRA >1, 1, 0),
          FSTOTXPNC_perpers = ifelse(is.na(FSTOTXPNC), NA, FSTOTXPNC_perpers),
-         FSSSTMPVALC_bin = ifelse()
+         FSSSTMPVALC_bin = ifelse(is.na(FSSTMPVALC), 0, 1)
   )
 
 
@@ -155,7 +155,7 @@ ggplot(data=filter(cps_data, kids==0)) +
 
 #FOCUS Y VARIABLES:
 #FSWROUTY - Phuong
-#Binary snap no snap FSSTMPVALC - Matt
+#Binary snap no snap FSSTMPVALC - Matt (This has a very small number of positives)
 #FSFOODS - Aria
 
 
@@ -163,14 +163,20 @@ ggplot(data=filter(cps_data, kids==0)) +
 #FORWARD REGRESSION (IMPROVE):
 remove_na = filter(cps_data, !is.na(cps_data$FSWROUTY))
 
+firths =logistf(FSWROUTY ~ hhsize + married + education + elderly + kids + black + hispanic + female,
+        data=remove_na,
+        weights = weight)
+
 m1 = glm(FSWROUTY ~ hhsize + married + education + elderly + kids + black + hispanic + female,
          data=remove_na,
          weights = weight,
-         family = binomial(link="logit"))
+         family = binomial(link="logit"),
+         method="firthglm.fit")
 m0 = glm(FSWROUTY ~ 1,
          data=remove_na,
          weights = weight,
-         family = binomial(link="logit"))
+         family = binomial(link="logit"),
+         method="firthglm.fit")
 
 v1 = step(m0, scope=list(lower = m0, upper=m1, direction="both"))
 summary(v1)
