@@ -7,6 +7,7 @@ library(ggthemes)
 library(logistf)
 library(glmnet)
 library(haven)
+library(pROC)
 
 cps <- read.csv("./data/cps_00005.csv")
 head(cps[,c("CPSID","PERNUM", "FSSTATUS", "FSSTATUSMD", "RACE","EDUC")]) %>% kable
@@ -34,7 +35,7 @@ cps <- cps %>% mutate(SEX = SEX-1,
 #Not currently grouping properly
 cps_data <- cps %>% group_by(CPSID=as.factor(CPSID)) %>%
   summarise(
-    COUNTY = first(COUNTY),
+    county = first(COUNTY),
     weight = first(HWTFINL),
     hhsize = n(),
     
@@ -85,29 +86,13 @@ cps_data <- cps_data %>%
          FSBAL = ifelse(FSBAL > 1, 1, 0),
          FSRAWSCRA = ifelse(FSRAWSCRA >1, 1, 0),
          FSTOTXPNC_perpers = ifelse(is.na(FSTOTXPNC), NA, FSTOTXPNC_perpers),
-         FSSSTMPVALC_bin = ifelse(is.na(FSSTMPVALC), 0, 1)
+         FSSTMPVALC_bin = ifelse(is.na(FSSTMPVALC), 0, 1)
   )
-
-
 
 summary(cps_data)
 str(cps_data)
 head(cps_data)
 
-ggplot(data=cps_data) + 
-  geom_point(aes(x=hhsize, y=FSTOTXPNC_perpers))
-
-ggplot(data=cps_data) + 
-  geom_point(aes(x=kids, y=FSTOTXPNC_perpers))
-
-ggplot(data=cps_data) + 
-  geom_point(aes(x=elderly, y=FSTOTXPNC_perpers))
-
-ggplot(data=cps_data, aes(x=kids, y=hhsize)) + 
-  geom_count(aes(color=after_stat(n)))
-
-ggplot(data=filter(cps_data, kids==0)) + 
-  geom_point(aes(x=hhsize, y=FSTOTXPNC_perpers))
 
 #PREDICTIVE VARIABLES
 #hhsize, married, education, elderly, kids, black, hispanic, female, county(?)
@@ -117,23 +102,128 @@ ggplot(data=filter(cps_data, kids==0)) +
 #Binary snap no snap FSSTMPVALC - Matt (This has a very small number of positives)
 #FSFOODS - Aria
 
+###############################
+#       Train Test Split      #
+###############################
+
+RNGkind(sample.kind = "default")
+set.seed(159159)
+train.idx <- sample(x=1:nrow(cps_data), size=.7*nrow(cps_data))
+train.df <- cps_data[train.idx,]
+test.df <- cps_data[-train.idx,]
 
 
-#FORWARD REGRESSION (IMPROVE):
-remove_na = filter(cps_data, !is.na(cps_data$FSWROUTY))
+###########################
+#   Food Stamp Analysis   #
+###########################
+FSSTMP.x.train <- model.matrix(FSSTMPVALC_bin ~ hhsize + married + education + elderly +
+                                 kids + black + hispanic + female + county
+                                 , data=train.df)[,-1]
+FSSTMP.x.test <- model.matrix(FSSTMPVALC_bin ~ hhsize + married + education + elderly +
+                                kids + black + hispanic + female + county
+                                , data=test.df)[,-1]
+FSSTMP.y.train <- as.vector(train.df$FSSTMPVALC_bin)
+FSSTMP.y.test <- as.vector(test.df$FSSTMPVALC_bin)
 
-firths =logistf(FSWROUTY ~ hhsize + married + education + elderly + kids + black + hispanic + female,
-        data=remove_na,
-        weights = weight)
+###########################
+# MLE Logistic Regression #
+###########################
 
-m1 = glm(FSWROUTY ~ hhsize + married + education + elderly + kids + black + hispanic + female,
-         data=remove_na,
-         weights = weight,
-         family = binomial(link="logit"))
-m0 = glm(FSWROUTY ~ 1,
-         data=remove_na,
-         weights = weight,
-         family = binomial(link="logit"))
+lm_fsstmp_mle <- glm(FSSTMPVALC_bin ~ hhsize + married + education + elderly +
+                      kids + black + hispanic + female + county,
+                     data=train.df,
+                     family=binomial(link="logit"),
+                     weights=weight
+                    )
 
-v1 = step(m0, scope=list(lower = m0, upper=m1, direction="both"))
-summary(v1)
+summary(lm_fsstmp_mle)
+lm_fsstmp_mle_beta <- lm_fsstmp_mle %>% coef()
+
+test.df.preds <- test.df %>% 
+  mutate(
+    lm_fsstmp_mle_preds = predict(lm_fsstmp_mle, test.df, type="response")
+  )
+
+lm_fsstmp_mle_rocCurve <- roc(
+  response=as.factor(test.df.preds$FSSTMPVALC_bin),
+  predictor= test.df.preds$lm_fsstmp_mle_preds,
+  levels=c("0","1"))
+
+plot(lm_fsstmp_mle_rocCurve, print.thres=TRUE, print.auc=TRUE)
+
+lm_fsstmp_mle_pi_star <- coords(lm_fsstmp_mle_rocCurve, "best", ref="threshold")$threshold[1]
+
+################################
+# Firth's Penalized Likelihood #
+################################
+
+
+
+################
+#     Lasso    #
+################
+
+lr_lasso_fsstmp_cv <- cv.glmnet(FSSTMP.x.train, FSSTMP.y.train, family=binomial(link="logit"), alpha=1)
+
+plot(lr_lasso_fsstmp_cv)
+
+best_lasso_lambda_fsstmp <- lr_lasso_fsstmp_cv$lambda.min
+
+lr_lasso_coefs_fsstmp <- coef(lr_lasso_fsstmp_cv, s="lambda.min") %>% as.matrix()
+
+lr_lasso_coefs_fsstmp #Really interesting to see that there are no 0s for coefficients.
+
+final_lasso_fsstmp <- glmnet(FSSTMP.x.train, FSSTMP.y.train, family=binomial(link="logit"), 
+                            alpha=1, lambda = best_lasso_lambda_fsstmp)
+
+test.df.preds <- test.df.preds %>% mutate(
+  lasso_pred_fsstmp = predict(final_lasso_fsstmp, FSSTMP.x.test, type="response")[,1]
+)
+
+lasso_fsstmp_rocCurve <- roc(response = as.factor(test.df.preds$FSSTMPVALC_bin),
+                             predictor =test.df.preds$lasso_pred_fsstmp,
+                             levels=c("0", "1"))
+
+plot(lasso_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #Better at AUC = .799, (.677, .810)
+
+#############
+#   Ridge   #
+#############
+
+lr_ridge_fsstmp_cv <- cv.glmnet(FSSTMP.x.train, FSSTMP.y.train, family=binomial(link="logit"), alpha=0)
+
+plot(lr_ridge_fsstmp_cv)
+
+best_ridge_lambda_fsstmp <- lr_lasso_fsstmp_cv$lambda.min
+
+lr_ridge_coefs_fsstmp <- coef(lr_ridge_fsstmp_cv, s="lambda.min") %>% as.matrix()
+
+lr_ridge_coefs_fsstmp
+
+final_ridge_fsstmp <- glmnet(FSSTMP.x.train, FSSTMP.y.train, family=binomial(link="logit"), 
+                             alpha=0, lambda = best_ridge_lambda_fsstmp)
+
+test.df.preds <- test.df.preds %>% mutate(
+  ridge_pred_fsstmp = predict(final_ridge_fsstmp, FSSTMP.x.test, type="response")[,1]
+)
+
+ridge_fsstmp_rocCurve <- roc(response = as.factor(test.df.preds$FSSTMPVALC_bin),
+                             predictor =test.df.preds$ridge_pred_fsstmp,
+                             levels=c("0", "1"))
+
+plot(ridge_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #.799 (.679,.810)
+
+#Note that these felt like they were pretty close to the maximum likelihood on their plots.
+#Since Lasso didn't have any 0 coefficients, it should be very similar to ridge,
+#Since the big difference between the two is that Lasso can set these coefs to 0 while ridge 
+#Moves uniformly towards 0. 
+
+#Random Forest w/AIC/BIC
+
+#stepwise/backwards regression
+
+#clustering?
+#PCA ?
+
+
+
