@@ -14,6 +14,10 @@ library(randomForest)
 
 cps_data <- read.csv("./data/interim/cps_data.csv")
 
+cps_data <- cps_data %>% mutate(
+  FSSTMPVALC_bin_fact = as.factor(FSSTMPVALC_bin_char)
+)
+
 ###############################
 #       Train Test Split      #
 ###############################
@@ -170,14 +174,35 @@ ridge_fsstmp_pi_star <- coords(ridge_fsstmp_rocCurve, "best", ref="threshold")$t
 #     Random Forest     #
 #########################
 
-rf_init_fsstmp <- randomForest(FSSTMPVALC_bin ~ hhsize + married + education + elderly +
+rf_init_fsstmp <- randomForest(FSSTMPVALC_bin_fact ~ hhsize + married + education + elderly +
                               kids + black + hispanic + female,
                               data=train.df,
                               mtry=3,
                               ntree=1000,
                               importance=TRUE)
 
-predict(rf_init_fsstmp, test.df)
+pi_hat <- predict(rf_init_fsstmp, test.df, type="prob")[,"Yes"]
+rf_rocCurve <- roc(response=test.df$FSSTMPVALC_bin_fact,
+                predictor=pi_hat,
+                levels=c("No", "Yes"))
+
+plot(rf_rocCurve, print.thres=TRUE, print.auc=TRUE)
+
+rf_fsstmp_pi_star <- coords(rf_rocCurve, "best", ret="threshold")$threshold[1]
+
+test.df.preds <- test.df.preds %>% mutate(
+  rf_fsstmp_preds = as.factor(ifelse(pi_hat > rf_fsstmp_pi_star, "Yes", "No"))
+)
+
+varImpPlot(rf_init_fsstmp, type=1)
+
+#Build with best model so far from there
+
+##########################
+#       Clustering       #
+##########################
+
+
 
 #############################
 # Visualizing Relationships #
@@ -191,8 +216,5 @@ ggplot(data=cps_data) +
 ggplot(data=cps_data) +
   geom_histogram(aes(x=hhsize, fill=FSSTMPVALC_bin_char), binwidth=1, position="fill") +
   scale_fill_brewer(palette="Dark2")
-
-#clustering?
-#PCA ?
 
 #Questions: Writing model objects
