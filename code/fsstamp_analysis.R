@@ -196,7 +196,23 @@ test.df.preds <- test.df.preds %>% mutate(
 
 varImpPlot(rf_init_fsstmp, type=1)
 
+rf_vi <- as.data.frame(varImpPlot(rf_init_fsstmp, type=1))
+
+rf_vi$Variable <- rownames(rf_vi)
+
+rf_vi <- rf_vi %>% arrange(desc(MeanDecreaseAccuracy))
+
+model_building = data.frame(number_of_variables=rep(NA, nrow(rf_vi)), BIC=rep(NA, nrow(rf_vi)))
+previous_BIC = 100000000
+
+i <- 1
+while (i == 1){
+  
+}
+
 #Build with best model so far from there
+
+
 
 ##########################
 #       Clustering       #
@@ -214,7 +230,7 @@ ggplot(data=cps_data) +
   scale_fill_brewer(palette="Dark2")
 
 ggplot(data=cps_data) +
-  geom_histogram(aes(x=hhsize, fill=FSSTMPVALC_bin_char), binwidth=1, position="fill") +
+  geom_histogram(aes(x=married, fill=FSSTMPVALC_bin_char), binwidth=1, position="fill") +
   scale_fill_brewer(palette="Dark2")
 
 #Questions: Writing model objects
