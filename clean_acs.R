@@ -40,4 +40,3 @@ acs_data <- acs_data %>% group_by(serialno = as.factor(serialno)) %>%
 
 head(acs_data)
 
-# hi
