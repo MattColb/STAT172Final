@@ -38,16 +38,15 @@ test.df.preds <- test.df
 #Fit a cluster?
 #Think about what I could do with NA values
 #Make plots/clean up ROC plots
-#
 
 ###########################
 #   Train Test Split      #
 ###########################
 FSSTMP.x.train <- model.matrix(FSSTMPVALC_bin ~ hhsize + married + education + elderly +
-                                 kids + black + hispanic + female + county
+                                 kids + black + hispanic + female
                                , data=train.df)[,-1]
 FSSTMP.x.test <- model.matrix(FSSTMPVALC_bin ~ hhsize + married + education + elderly +
-                                kids + black + hispanic + female + county
+                                kids + black + hispanic + female
                               , data=test.df)[,-1]
 FSSTMP.y.train <- as.vector(train.df$FSSTMPVALC_bin)
 FSSTMP.y.test <- as.vector(test.df$FSSTMPVALC_bin)
@@ -59,7 +58,7 @@ test.weights <- as.vector(test.df$weight)
 ###########################
 
 lr_mle_fsstmp <- glm(FSSTMPVALC_bin ~ hhsize + married + education + elderly +
-                       kids + black + hispanic + female + county,
+                       kids + black + hispanic + female,
                      data=train.df,
                      family=binomial(link="logit"),
                      weights=weight
@@ -89,7 +88,7 @@ lr_mle_fsstmp_pi_star <- coords(lr_mle_fsstmp_rocCurve, "best", ref="threshold")
 ################################
 
 lr_firths_fsstmp <- logistf(FSSTMPVALC_bin ~ hhsize + married + education + elderly +
-                              kids + black + hispanic + female + county,
+                              kids + black + hispanic + female,
                             data=train.df,
                             weights=weight)
 
@@ -140,6 +139,10 @@ plot(lasso_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #Better at AUC = .
 
 lasso_fsstmp_pi_star <- coords(lasso_fsstmp_rocCurve, "best", ref="threshold")$threshold[1]
 
+saveRDS(lr_lasso_fsstmp, "./models/fsstmp/lasso_model.RDS")
+
+saveRDS(lasso_fsstmp_pi_star, "./models/fsstmp/lasso_pi_star.RDS")
+
 #############
 #   Ridge   #
 #############
@@ -181,6 +184,8 @@ rf_init_fsstmp <- randomForest(FSSTMPVALC_bin_fact ~ hhsize + married + educatio
                               ntree=1000,
                               importance=TRUE)
 
+#Multiple mtry
+
 pi_hat <- predict(rf_init_fsstmp, test.df, type="prob")[,"Yes"]
 rf_rocCurve <- roc(response=test.df$FSSTMPVALC_bin_fact,
                 predictor=pi_hat,
@@ -207,7 +212,7 @@ previous_BIC = 100000000
 
 i <- 1
 while (i == 1){
-  
+  i <- 0
 }
 
 #Build with best model so far from there
