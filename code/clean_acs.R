@@ -78,6 +78,7 @@ acs_predicted <- acs_data %>% mutate(
   fsstmp_prediction = ifelse(fsstmp_predictions > lr_lasso_fsstmp_pi_star, "On Assistance", "Not On Assistance")
 )
 
+#How does this adjust with the weights
 summary_by_PUMA <- acs_predicted %>% group_by(PUMA = as.factor(PUMA)) %>% 
   summarise(
     sample_size = sum(hhsize),
@@ -98,6 +99,6 @@ ggplot(data = map_data) +
   geom_sf(aes(fill = proportion_on_assistance)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
   theme_minimal() +
-  labs(title = "Example Choropleth Map",
-       fill = "Value")
+  labs(title = "Iowa Residents on Food Stamps or SNAP",
+       fill = "Proportion of\nResidents")
 # hi
