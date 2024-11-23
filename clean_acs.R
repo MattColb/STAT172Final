@@ -38,5 +38,9 @@ acs_data <- acs_data %>% group_by(serialno = as.factor(serialno)) %>%
             married = sum(MARRIED),
             weight = weight[1])
 
+<<<<<<< Updated upstream
 head(acs_data)
 
+=======
+head(acs_data)
+>>>>>>> Stashed changes
