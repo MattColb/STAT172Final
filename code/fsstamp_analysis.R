@@ -36,6 +36,7 @@ test.df.preds <- test.df
 #Things to think about/do
 #Fit a random forest
 #Fit a cluster?
+#What are the weights doing?
 #Think about what I could do with NA values
 #Make plots/clean up ROC plots
 
@@ -223,7 +224,7 @@ while (i == 1){
 #       Clustering       #
 ##########################
 
-
+#kmeans gives 10 different groups which we use in a random forest as categorical
 
 #############################
 # Visualizing Relationships #

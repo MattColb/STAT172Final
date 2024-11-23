@@ -82,7 +82,10 @@ acs_predicted <- acs_data %>% mutate(
 summary_by_PUMA <- acs_predicted %>% group_by(PUMA = as.factor(PUMA)) %>% 
   summarise(
     sample_size = sum(hhsize),
+    total_weights = sum(weight),
+    total_weights_by_sample = sum(weight *hhsize),
     people_on_assistance = sum(ifelse(fsstmp_prediction == "On Assistance", 1, 0)),
+    people_on_assistance_weighted = sum(ifelse(fsstmp_prediction == "On Assistance", 1, 0)*weight),
     proportion_on_assistance = people_on_assistance/sample_size
   ) %>% as.data.frame() %>% arrange(desc(proportion_on_assistance))
 
