@@ -150,7 +150,6 @@ ggplot(data=cps_data, aes(x=kids, y=hhsize)) +
 ggplot(data=filter(cps_data, kids==0)) + 
   geom_point(aes(x=hhsize, y=FSTOTXPNC_perpers))
 
-<<<<<<< Updated upstream
 #PREDICTIVE VARIABLES
 #hhsize, married, education, elderly, kids, black, hispanic, female, county(?)
 
@@ -175,5 +174,3 @@ m0 = glm(FSWROUTY ~ 1,
 
 v1 = step(m0, scope=list(lower = m0, upper=m1, direction="both"))
 summary(v1)
-=======
->>>>>>> Stashed changes
