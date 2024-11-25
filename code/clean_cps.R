@@ -100,8 +100,13 @@ summary(cps_data)
 str(cps_data)
 head(cps_data)
 
-write.csv(cps_data, "./data/interim/cps_data.csv")
+table(cps_data$FSWROUTY, cps_data$FSSTMPVALC_bin)
 
+table(cps_data$FSFOODS, cps_data$FSSTMPVALC_bin)
+
+table(cps_data$FSFOODS, cps_data$FSWROUTY)
+
+write.csv(cps_data, "./data/interim/cps_data.csv")
 
 #PREDICTIVE VARIABLES
 #hhsize, married, education, elderly, kids, black, hispanic, female, county(?)
@@ -110,6 +115,3 @@ write.csv(cps_data, "./data/interim/cps_data.csv")
 #FSWROUTY - Phuong
 #Binary snap no snap FSSTMPVALC - Matt (This has a very small number of positives)
 #FSFOODS - Aria
-
-
-
