@@ -57,8 +57,13 @@ summary(lr_mle_fsfoods) #grossly high standard error on alll vars
 #look at the coefficients from the MLE logistic regression
 beta <- lr_mle_fsfoods %>% coef()
 beta
+
+#---Firth's Penalized Likelihood----
+
+
 #----Lasso and Ridge with Basic X vars----
 ## Make all necessary matrices and vectors
+#ADD WEIGHTS TO THESE OH DEAR
 fsfoods.x.train <- model.matrix(FSFOODS~hhsize + married + education + elderly +
                                   kids + black + hispanic + female,
                                 data = train.df)[,-1] 
@@ -96,3 +101,26 @@ fsfoods_lasso_f1 <- glmnet(fsfoods.x.train, fsfoods.y.train,
 fsfoods_ridge_f1 <- glmnet(fsfoods.x.train, fsfoods.y.train, 
                       family = binomial(link = "logit"), alpha = 0,
                       lambda = best_ridge_lambda) #this lambda is what actually tunes the model
+#----Random Forest----
+
+#----Clustering---
+
+#----Compare Models' Performances----
+#First, on the testing data split
+test.df.cpspreds <- test.df %>% 
+  mutate(
+    mle_pred = predict(lr_mle, test.df, type = "response"),
+    #note: lasso and ridge get the MATRIX x.test 
+    lasso_pred = predict(final_lasso, x.test, type = "response")[,1],
+    ridge_pred = predict(final_ridge, x.test, type = "response")[,1]
+    #note: ALL NEED type = "response" so we don't get log-odds in our result
+  )
+#Then, on the ACS data
+test.df.acspreds <- test.df %>% 
+  mutate(
+    mle_pred = predict(lr_mle, test.df, type = "response"),
+    #note: lasso and ridge get the MATRIX x.test 
+    lasso_pred = predict(final_lasso, x.test, type = "response")[,1],
+    ridge_pred = predict(final_ridge, x.test, type = "response")[,1]
+    #note: ALL NEED type = "response" so we don't get log-odds in our result
+  )
