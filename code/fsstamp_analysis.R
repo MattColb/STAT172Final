@@ -11,8 +11,8 @@ library(pROC)
 library(RColorBrewer)
 library(randomForest)
 
-
-cps_data <- read.csv("./data/interim/cps_data.csv")
+source("./code/clean_cps.R")
+source("./code/clean_acs.R")
 
 cps_data <- cps_data %>% mutate(
   FSSTMPVALC_bin_fact = as.factor(FSSTMPVALC_bin_char)
