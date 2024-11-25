@@ -1,8 +1,19 @@
 rm(list=ls())
 
 library(ggplot2)
+library(tidyverse)
+library(knitr)
+library(tibble)
+library(ggthemes)
+library(logistf)
+library(glmnet)
+library(haven)
+library(pROC)
+library(RColorBrewer)
+library(randomForest)
 
-cps_data <- read.csv("./data/interim/cps_data.csv")
+source("./code/clean_cps.R")
+source("./code/clean_acs.R")
 
 table(cps_data$FSWROUTY, cps_data$FSSTMPVALC_bin)
 #With this table, we can see that a little over half
