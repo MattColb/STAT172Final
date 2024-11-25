@@ -38,6 +38,10 @@ table(cps_data$FSFOODS, cps_data$FSWROUTY)
 table(cps_data$FSFOODS, cps_data$FSWROUTY, cps_data$FSSTMPVALC_bin)
 #About 216 people experience all 3.
 
+#######################################
+# Visualizing Relationships of FSSTMP #
+#######################################
+
 ggplot(data=cps_data) + 
   geom_histogram(aes(x=elderly, fill=as.factor(FSSTMPVALC_bin_char)), binwidth=1, position="fill")
 
@@ -46,3 +50,13 @@ ggplot(data=cps_data) +
 
 ggplot(data=cps_data) + 
   geom_histogram(aes(x=married, fill=as.factor(FSSTMPVALC_bin_char)), binwidth=1, position="fill")
+
+#Proportion of food stamps for each elderly person in household
+ggplot(data=cps_data) +
+  geom_histogram(aes(x=elderly, fill=FSSTMPVALC_bin_char), binwidth = 1, position="fill") +
+  scale_fill_brewer(palette="Dark2")
+
+ggplot(data=cps_data) +
+  geom_histogram(aes(x=married, fill=FSSTMPVALC_bin_char), binwidth=1, position="fill") +
+  scale_fill_brewer(palette="Dark2")
+

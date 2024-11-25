@@ -14,6 +14,8 @@ library(randomForest)
 source("./code/clean_cps.R")
 source("./code/clean_acs.R")
 
+cps_data <- as.data.frame(cps_data)
+
 cps_data <- cps_data %>% mutate(
   FSSTMPVALC_bin_fact = as.factor(FSSTMPVALC_bin_char)
 )
@@ -43,10 +45,12 @@ test.df.preds <- test.df
 ###########################
 #   Train Test Split      #
 ###########################
-FSSTMP.x.train <- model.matrix(FSSTMPVALC_bin ~ hhsize + married + education + elderly +
+FSSTMP.x.train <- model.matrix(FSSTMPVALC_bin ~ hhsize + married + 
+                                 education + elderly +
                                  kids + black + hispanic + female
                                , data=train.df)[,-1]
-FSSTMP.x.test <- model.matrix(FSSTMPVALC_bin ~ hhsize + married + education + elderly +
+FSSTMP.x.test <- model.matrix(FSSTMPVALC_bin ~ hhsize + married + 
+                                education + elderly +
                                 kids + black + hispanic + female
                               , data=test.df)[,-1]
 FSSTMP.y.train <- as.vector(train.df$FSSTMPVALC_bin)
@@ -140,10 +144,6 @@ plot(lasso_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #Better at AUC = .
 
 lasso_fsstmp_pi_star <- coords(lasso_fsstmp_rocCurve, "best", ref="threshold")$threshold[1]
 
-saveRDS(lr_lasso_fsstmp, "./models/fsstmp/lasso_model.RDS")
-
-saveRDS(lasso_fsstmp_pi_star, "./models/fsstmp/lasso_pi_star.RDS")
-
 #############
 #   Ridge   #
 #############
@@ -218,29 +218,76 @@ while (i == 1){
 
 #Build with best model so far from there
 
+###################################
+# PREDICTING FSWROUTY AND FSSTMP  #
+###################################
 
 
-##########################
-#       Clustering       #
-##########################
+########################################
+##  Loops for Squared/Interaction Term #
+########################################
 
-#kmeans gives 10 different groups which we use in a random forest as categorical
+reduced_train = train.df %>% 
+  select(c("weight", "hhsize", "female", "hispanic", "black",
+           "kids", "elderly", "education", "married", "FSSTMPVALC_bin"))
 
+reduced_test = test.df %>% 
+  select(c("weight", "hhsize", "female", "hispanic", "black",
+           "kids", "elderly", "education", "married", "FSSTMPVALC_bin"))
+
+FSSTMP.y.train <- as.vector(train.df$FSSTMPVALC_bin)
+FSSTMP.y.test <- as.vector(test.df$FSSTMPVALC_bin)
+
+interaction_df = data.frame(added_interaction=rep(NA, 81), AUC=rep(NA, 81))
+inc = 1
+
+for(i in 1:2){
+  for (j in 1:2){
+    col1 = colnames(reduced_train)[i][1]
+    col2 = colnames(reduced_train)[j][1]
+    str = paste(col1, col2, sep="_")
+    
+    interaction_train = reduced_train %>% 
+      mutate(interaction_term = (reduced_train[col1] * reduced_train[col2])[,1])
+    interaction_test = reduced_test %>% 
+      mutate(interaction_term = (reduced_test[col1] * reduced_test[col2])[,1])
+    
+    proper_train_x = model.matrix(FSSTMPVALC_bin ~ .
+                                  , data=interaction_train)[,-1]
+    proper_test_x = model.matrix(FSSTMPVALC_bin ~ .
+                                 , data=interaction_test)[,-1]
+    
+    lr_lasso_fsstmp_cv <- cv.glmnet(proper_train_x, FSSTMP.y.train, 
+                                    family=binomial(link="logit"), alpha=1, weights=train.weights)
+    
+    best_lasso_lambda_fsstmp <- lr_lasso_fsstmp_cv$lambda.min #GOOD
+    
+    lr_lasso_fsstmp <- glmnet(proper_train_x, FSSTMP.y.train, family=binomial(link="logit"), 
+                              alpha=1, lambda = best_lasso_lambda_fsstmp, weights=train.weights)
+    
+    lasso_fsstmp_rocCurve <- roc(response = as.factor(FSSTMP.y.test),
+                                 predictor = predict(lr_lasso_fsstmp, proper_test_x, type="response")[,1],
+                                 levels=c("0", "1"))
+    
+    interaction_df[inc, "added_interaction"] = str
+    interaction_df[inc, "AUC"] = lasso_fsstmp_rocCurve$auc
+    
+    inc = inc + 1
+  } 
+}
 
 ################################
 #   MAKING PREDICTIONS ON ACS  #
 ################################
 
-lr_lasso_fsstmp <- readRDS("./models/fsstmp/lasso_model.RDS")
-lr_lasso_fsstmp_pi_star <- readRDS("./models/fsstmp/lasso_pi_star.RDS")
 
-test_data <- model.matrix(~hhsize + married + education + elderly +
+acs_test_data <- model.matrix(~hhsize + married + education + elderly +
                             kids + black + hispanic + female, data=acs_data)[,-1]
 
-fsstmp_predictions <- predict(lr_lasso_fsstmp, test_data, type="response")[,1]
+fsstmp_predictions <- predict(lr_lasso_fsstmp, acs_test_data, type="response")[,1]
 
 acs_predicted <- acs_data %>% mutate(
-  fsstmp_prediction = ifelse(fsstmp_predictions > lr_lasso_fsstmp_pi_star, "On Assistance", "Not On Assistance")
+  fsstmp_prediction = ifelse(fsstmp_predictions > lasso_fsstmp_pi_star, "On Assistance", "Not On Assistance")
 )
 
 #How does this adjust with the weights
@@ -251,7 +298,11 @@ summary_by_PUMA <- acs_predicted %>% group_by(PUMA = as.factor(PUMA)) %>%
     total_weights_by_sample = sum(weight *hhsize),
     people_on_assistance = sum(ifelse(fsstmp_prediction == "On Assistance", 1, 0)),
     people_on_assistance_weighted = sum(ifelse(fsstmp_prediction == "On Assistance", 1, 0)*weight),
-    proportion_on_assistance = people_on_assistance/sample_size
+    proportion_on_assistance = people_on_assistance/sample_size,
+    only_senior = sum(ifelse(elderly == hhsize, 1, 0)),
+    proportion_only_senior = only_senior/sample_size,
+    has_senior = sum(ifelse(elderly > 0, 1, 0)),
+    proportion_has_senior = has_senior/sample_size
   ) %>% as.data.frame() %>% arrange(desc(proportion_on_assistance))
 
 
@@ -264,24 +315,10 @@ map_data <- sf_data %>%
   left_join(summary_by_PUMA, by = "PUMA")
 
 ggplot(data = map_data) +
-  geom_sf(aes(fill = proportion_on_assistance)) +
+  geom_sf(aes(fill = proportion_has_senior)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
   theme_minimal() +
-  labs(title = "Iowa Residents on Food Stamps or SNAP",
-       fill = "Proportion of\nResidents")
+  labs(title = "Proportion of Households with Senior",
+       fill = "Proportion of\nHouseholds with\nSeniors")
 
-
-#############################
-# Visualizing Relationships #
-#############################
-
-#Proportion of food stamps for each elderly person in household
-ggplot(data=cps_data) +
-  geom_histogram(aes(x=elderly, fill=FSSTMPVALC_bin_char), binwidth = 1, position="fill") +
-  scale_fill_brewer(palette="Dark2")
-
-ggplot(data=cps_data) +
-  geom_histogram(aes(x=married, fill=FSSTMPVALC_bin_char), binwidth=1, position="fill") +
-  scale_fill_brewer(palette="Dark2")
-
-#Questions: Writing model objects
+#Proportion of ACS Senior households
