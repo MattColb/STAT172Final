@@ -22,7 +22,7 @@ acs_data <- acs %>%
   mutate(
     SEX = Sex-1,
     CHILD = ifelse(Age < 18, 1, 0),
-    ELDERLY = ifelse(Age > 64, 1, 0),
+    ELDERLY = ifelse(Age > 59, 1, 0),
     BLACK = ifelse(Race==2, 1, 0),
     HISPANIC = ifelse(Hispanic > 0, 1, 0),
     EDUC = as.integer(Education %in% c(3,4)),
