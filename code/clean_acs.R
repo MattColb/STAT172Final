@@ -1,5 +1,3 @@
-rm(list=ls())
-
 #install.packages("sf")
 
 library(sf)

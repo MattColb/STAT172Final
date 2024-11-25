@@ -1,5 +1,7 @@
 rm(list=ls())
 
+library(ggplot2)
+
 cps_data <- read.csv("./data/interim/cps_data.csv")
 
 table(cps_data$FSWROUTY, cps_data$FSSTMPVALC_bin)
@@ -22,4 +24,14 @@ table(cps_data$FSFOODS, cps_data$FSWROUTY)
 #or are able to eat the types of food that they enjoy
 #Even without worrying about being able to afford food.
 
+table(cps_data$FSFOODS, cps_data$FSWROUTY, cps_data$FSSTMPVALC_bin)
+#About 216 people experience all 3.
 
+ggplot(data=cps_data) + 
+  geom_histogram(aes(x=elderly, fill=as.factor(FSSTMPVALC_bin_char)), binwidth=1, position="fill")
+
+ggplot(data=cps_data) + 
+  geom_histogram(aes(x=hhsize, fill=as.factor(FSSTMPVALC_bin_char)), binwidth=1, position="fill")
+
+ggplot(data=cps_data) + 
+  geom_histogram(aes(x=married, fill=as.factor(FSSTMPVALC_bin_char)), binwidth=1, position="fill")
