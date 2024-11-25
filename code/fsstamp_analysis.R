@@ -11,8 +11,8 @@ library(pROC)
 library(RColorBrewer)
 library(randomForest)
 
-
-cps_data <- read.csv("./data/interim/cps_data.csv")
+source("./code/clean_cps.R")
+source("./code/clean_acs.R")
 
 cps_data <- cps_data %>% mutate(
   FSSTMPVALC_bin_fact = as.factor(FSSTMPVALC_bin_char)
@@ -225,6 +225,51 @@ while (i == 1){
 ##########################
 
 #kmeans gives 10 different groups which we use in a random forest as categorical
+
+
+################################
+#   MAKING PREDICTIONS ON ACS  #
+################################
+
+lr_lasso_fsstmp <- readRDS("./models/fsstmp/lasso_model.RDS")
+lr_lasso_fsstmp_pi_star <- readRDS("./models/fsstmp/lasso_pi_star.RDS")
+
+test_data <- model.matrix(~hhsize + married + education + elderly +
+                            kids + black + hispanic + female, data=acs_data)[,-1]
+
+fsstmp_predictions <- predict(lr_lasso_fsstmp, test_data, type="response")[,1]
+
+acs_predicted <- acs_data %>% mutate(
+  fsstmp_prediction = ifelse(fsstmp_predictions > lr_lasso_fsstmp_pi_star, "On Assistance", "Not On Assistance")
+)
+
+#How does this adjust with the weights
+summary_by_PUMA <- acs_predicted %>% group_by(PUMA = as.factor(PUMA)) %>% 
+  summarise(
+    sample_size = sum(hhsize),
+    total_weights = sum(weight),
+    total_weights_by_sample = sum(weight *hhsize),
+    people_on_assistance = sum(ifelse(fsstmp_prediction == "On Assistance", 1, 0)),
+    people_on_assistance_weighted = sum(ifelse(fsstmp_prediction == "On Assistance", 1, 0)*weight),
+    proportion_on_assistance = people_on_assistance/sample_size
+  ) %>% as.data.frame() %>% arrange(desc(proportion_on_assistance))
+
+
+#https://www.geoplatform.gov/metadata/258db7ce-2581-4488-bb5e-e387b6119c7a
+sf_data <- st_read("./data/tl_2023_19_puma20/tl_2023_19_puma20.shp")
+
+colnames(sf_data)[colnames(sf_data) == "GEOID20"] = "PUMA"
+
+map_data <- sf_data %>%
+  left_join(summary_by_PUMA, by = "PUMA")
+
+ggplot(data = map_data) +
+  geom_sf(aes(fill = proportion_on_assistance)) +
+  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
+  theme_minimal() +
+  labs(title = "Iowa Residents on Food Stamps or SNAP",
+       fill = "Proportion of\nResidents")
+
 
 #############################
 # Visualizing Relationships #
