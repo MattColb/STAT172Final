@@ -228,11 +228,11 @@ while (i == 1){
 ########################################
 
 reduced_train = train.df %>% 
-  select(c("weight", "hhsize", "female", "hispanic", "black",
+  select(c("hhsize", "female", "hispanic", "black",
            "kids", "elderly", "education", "married", "FSSTMPVALC_bin"))
 
 reduced_test = test.df %>% 
-  select(c("weight", "hhsize", "female", "hispanic", "black",
+  select(c("hhsize", "female", "hispanic", "black",
            "kids", "elderly", "education", "married", "FSSTMPVALC_bin"))
 
 FSSTMP.y.train <- as.vector(train.df$FSSTMPVALC_bin)
@@ -241,40 +241,55 @@ FSSTMP.y.test <- as.vector(test.df$FSSTMPVALC_bin)
 interaction_df = data.frame(added_interaction=rep(NA, 81), AUC=rep(NA, 81))
 inc = 1
 
-for(i in 1:2){
-  for (j in 1:2){
+for(i in 1:8){
+  for (j in i:8){
     col1 = colnames(reduced_train)[i][1]
     col2 = colnames(reduced_train)[j][1]
-    str = paste(col1, col2, sep="_")
+    col_str = paste(col1, col2, sep="_")
     
-    interaction_train = reduced_train %>% 
+    reduced_train = reduced_train %>% 
       mutate(interaction_term = (reduced_train[col1] * reduced_train[col2])[,1])
-    interaction_test = reduced_test %>% 
+    reduced_test = reduced_test %>% 
       mutate(interaction_term = (reduced_test[col1] * reduced_test[col2])[,1])
     
-    proper_train_x = model.matrix(FSSTMPVALC_bin ~ .
-                                  , data=interaction_train)[,-1]
-    proper_test_x = model.matrix(FSSTMPVALC_bin ~ .
-                                 , data=interaction_test)[,-1]
-    
-    lr_lasso_fsstmp_cv <- cv.glmnet(proper_train_x, FSSTMP.y.train, 
-                                    family=binomial(link="logit"), alpha=1, weights=train.weights)
-    
-    best_lasso_lambda_fsstmp <- lr_lasso_fsstmp_cv$lambda.min #GOOD
-    
-    lr_lasso_fsstmp <- glmnet(proper_train_x, FSSTMP.y.train, family=binomial(link="logit"), 
-                              alpha=1, lambda = best_lasso_lambda_fsstmp, weights=train.weights)
-    
-    lasso_fsstmp_rocCurve <- roc(response = as.factor(FSSTMP.y.test),
-                                 predictor = predict(lr_lasso_fsstmp, proper_test_x, type="response")[,1],
-                                 levels=c("0", "1"))
-    
-    interaction_df[inc, "added_interaction"] = str
-    interaction_df[inc, "AUC"] = lasso_fsstmp_rocCurve$auc
-    
-    inc = inc + 1
+    names(reduced_train)[names(reduced_train) == "interaction_term"] = col_str
+    names(reduced_test)[names(reduced_test) == "interaction_term"] = col_str
   } 
 }
+
+reduced_train_matrix_x <- model.matrix(FSSTMPVALC_bin ~ .
+                               , data=reduced_train)[,-1]
+reduced_test_matrix_x <- model.matrix(FSSTMPVALC_bin ~ .
+                              , data=reduced_test)[,-1]
+
+reduced_train_y <- as.vector(reduced_train$FSSTMPVALC_bin)
+reduced_test_y <- as.vector(reduced_test$FSSTMPVALC_bin)
+
+
+################################################
+# Making Lasso with Interaction/Squared Terms  #
+################################################
+
+lr_lasso_fsstmp_cv_2 <- cv.glmnet(reduced_train_matrix_x, reduced_train_y, 
+                                family=binomial(link="logit"), alpha=1, weights=train.weights)
+
+best_lasso_lambda_fsstmp_2 <- lr_lasso_fsstmp_cv_2$lambda.min
+
+lr_lasso_fsstmp_2 <- glmnet(reduced_train_matrix_x, reduced_train_y, family=binomial(link="logit"), 
+                          alpha=1, lambda = best_lasso_lambda_fsstmp_2, weights=train.weights)
+
+test.df.preds <- test.df.preds %>% mutate(
+  lasso_fsstmp_preds_2 = predict(lr_lasso_fsstmp_2, reduced_test_matrix_x, type="response")[,1]
+)
+
+lasso_fsstmp_rocCurve <- roc(response = as.factor(test.df.preds$FSSTMPVALC_bin),
+                             predictor =test.df.preds$lasso_fsstmp_preds_2,
+                             levels=c("0", "1"))
+
+plot(lasso_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #Better at AUC = .798, (.681, .810)
+
+lasso_fsstmp_pi_star <- coords(lasso_fsstmp_rocCurve, "best", ref="threshold")$threshold[1]
+
 
 ################################
 #   MAKING PREDICTIONS ON ACS  #
