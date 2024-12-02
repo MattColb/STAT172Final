@@ -23,7 +23,6 @@ head(cps_data)
 #is there a point to making this a character and then a factor? 
 ##YES because random forest won't work on numeric, it works on factors
 ##because then it sees it as a classification, not regression, problem.
-#probably yes and i just need to remember it
 #there's a bunch of nulls in here and it's generally binary, currently num type
 
 #just drop the na's and take note of how many obs you had and how many are left
@@ -53,7 +52,7 @@ y_var = c("FSFOODS")
 #----MLE Logistic Regression----
 
 lr_mle_fsfoods <- glm(FSFOODS ~ hhsize + married + education + elderly +
-                       kids + black + hispanic + female,
+                       kids + black + hispanic + female + faminc_cleaned,
                      data=train.df,
                      family=binomial(link="logit"),
                      weights=weight
@@ -66,15 +65,22 @@ lr_mle_fsfoods_beta <- lr_mle_fsfoods %>% coef()
 
 
 #---Firth's Penalized Likelihood----
+lr_fmle_fsfoods <- logistf(FSFOODS ~ hhsize + married + education + elderly +
+                             kids + black + hispanic + female + faminc_cleaned,
+                           data=train.df,
+                           weights=train.weights)
 
+summary(lr_fmle_fsfoods)
+#look at the coefficients from the MLE logistic regression
+lr_fmle_fsfoods_beta <- lr_fmle_fsfoods %>% coef()
 
 #----Lasso and Ridge with Basic X vars----
 ## Make all necessary matrices and vectors
 fsfoods.x.train <- model.matrix(FSFOODS~hhsize + married + education + elderly +
-                                  kids + black + hispanic + female,
+                                  kids + black + hispanic + female+ faminc_cleaned,
                                 data = train.df)[,-1] 
 fsfoods.x.test <- model.matrix(FSFOODS~hhsize + married + education + elderly +
-                                 kids + black + hispanic + female,
+                                 kids + black + hispanic + female+ faminc_cleaned,
                                data = test.df)[,-1]
 fsfoods.y.train <- train.df$FSFOODS %>% as.vector()
 fsfoods.y.test <- test.df$FSFOODS %>% as.vector()
@@ -120,14 +126,15 @@ fsfoods_ridge_f1 <- glmnet(fsfoods.x.train, fsfoods.y.train,
 #First, on the testing data split
 test.df.cpspreds <- test.df %>% 
   mutate(
-    mle_pred = predict(lr_mle, test.df, type = "response"),
+    mle_pred = predict(lr_mle_fsfoods, test.df, type = "response"),
+    fmle_pred = predict(lr_fmle_fsfoods, test.df, type = "response"),
     #note: lasso and ridge get the MATRIX x.test 
-    lasso_pred = predict(final_lasso, x.test, type = "response")[,1],
-    ridge_pred = predict(final_ridge, x.test, type = "response")[,1]
+    lasso_pred = predict(fsfoods_lasso_f1, fsfoods.x.test, type = "response")[,1],
+    ridge_pred = predict(fsfoods_ridge_f1, fsfoods.x.test, type = "response")[,1]
     #note: ALL NEED type = "response" so we don't get log-odds in our result
   )
-#Then, on the test data
-test.df.preds <- test.df %>% 
+#Then, on the acs data THIS NEEDS TO BE CHANGED TO REF THE ACTUAL ACS
+test.df.acspreds <- test.df %>% 
   mutate(
     mle_pred = predict(lr_mle_fsfoods, test.df, type = "response"),
     #note: lasso and ridge get the MATRIX x.test 
@@ -136,20 +143,30 @@ test.df.preds <- test.df %>%
     #note: ALL NEED type = "response" so we don't get log-odds in our result
   )
 
-#Fit ROC Curves
-mle_rocCurve <- roc(response = as.factor(test.df.preds$FSFOODS), #TRUTH
-                    predictor = test.df.preds$mle_pred, #predicted probabilities of MLE
+#Fit ROC Curves on CPS
+mle_rocCurve <- roc(response = as.factor(test.df.cpspreds$FSFOODS), #TRUTH
+                    predictor = test.df.cpspreds$mle_pred, #predicted probabilities of MLE
                     levels = c("0", "1"))
-lasso_rocCurve <- roc(response = as.factor(test.df.preds$FSFOODS), #TRUTH
-                      predictor = test.df.preds$lasso_pred, #predicted probabilities of MLE
+fmle_rocCurve<- roc(response = as.factor(test.df.cpspreds$FSFOODS), #TRUTH
+                    predictor = test.df.cpspreds$fmle_pred, #predicted probabilities of MLE
+                    levels = c("0", "1"))
+lasso_rocCurve <- roc(response = as.factor(test.df.cpspreds$FSFOODS), #TRUTH
+                      predictor = test.df.cpspreds$lasso_pred, #predicted probabilities of MLE
                       levels = c("0", "1"))
-ridge_rocCurve <- roc(response = as.factor(test.df.preds$FSFOODS), #TRUTH
-                      predictor = test.df.preds$ridge_pred, #predicted probabilities of MLE
+ridge_rocCurve <- roc(response = as.factor(test.df.cpspreds$FSFOODS), #TRUTH
+                      predictor = test.df.cpspreds$ridge_pred, #predicted probabilities of MLE
                       levels = c("0", "1"))
-#Copy pasted plotting code from Blackboard:
-#make data frame of MLE ROC info
+#PLOT CPS PREDICTIONS
+#make data frame of MLE ROC info 
 mle_data <- data.frame(
   Model = "MLE",
+  Specificity = mle_rocCurve$specificities,
+  Sensitivity = mle_rocCurve$sensitivities,
+  AUC = as.numeric(mle_rocCurve$auc)
+)
+#make data frame of Firth's ROC info
+fmle_data<- data.frame(
+  Model = "Firth's",
   Specificity = mle_rocCurve$specificities,
   Sensitivity = mle_rocCurve$sensitivities,
   AUC = as.numeric(mle_rocCurve$auc)
@@ -170,14 +187,14 @@ ridge_data <- data.frame(
 )
 
 # Combine all the data frames
-roc_data <- rbind(mle_data, lasso_data, ridge_data)
+roc_data <- rbind(mle_data, fmle_data, lasso_data, ridge_data)
 
 
 # Plot the data - all your model curves are on the same plot now!
 ggplot() +
   geom_line(aes(x = 1 - Specificity, y = Sensitivity, color = Model),data = roc_data) +
   geom_text(data = roc_data %>% group_by(Model) %>% slice(1), 
-            aes(x = 0.75, y = c(0.75, 0.65, 0.55), colour = Model,
+            aes(x = 0.75, y = c(0.75, 0.65, 0.55, 0.45), colour = Model,
                 label = paste0(Model, " AUC = ", round(AUC, 3)))) +
   scale_colour_brewer(palette = "Paired") +
   labs(x = "1 - Specificity", y = "Sensitivity", color = "Model") +
