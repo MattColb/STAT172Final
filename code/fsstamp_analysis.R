@@ -24,6 +24,8 @@ cps_data <- cps_data %>% mutate(
   FSSTMPVALC_bin_fact = as.factor(FSSTMPVALC_bin_char)
 )
 
+#(specificity, sensitivity)
+
 ###############################
 #       Train Test Split      #
 ###############################
