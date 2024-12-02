@@ -12,6 +12,9 @@ library(pROC)
 library(RColorBrewer)
 library(randomForest)
 library(dplyr)
+library(rpart)
+library(rpart.plot)
+library(ggplot2)
 
 source("./code/clean_cps.R")
 #source("./code/clean_acs.R") shouldn't I only have the cps source?
@@ -23,12 +26,13 @@ head(cps_data)
 #is there a point to making this a character and then a factor? 
 ##YES because random forest won't work on numeric, it works on factors
 ##because then it sees it as a classification, not regression, problem.
+
 #there's a bunch of nulls in here and it's generally binary, currently num type
+#just going to drop the na's and take note of how many obs I 
+#had and how many are left
 
-#just drop the na's and take note of how many obs you had and how many are left
-
-
-#try regressions (lasso probably) both with and without some meaningful interaction
+##TASKS
+#try regressions both with and without some meaningful interaction
 #terms to look at the ways your X's could affect eachother and the outcome
 
 summary(cps_data$FSFOODS) #FSFOODS has 1755 NA's
@@ -94,15 +98,14 @@ fsfoods_lasso_cv <- cv.glmnet(fsfoods.x.train, #MATRIX without our Y COLUMN
                          alpha = 1, 
                          weights = train.weights #1 for lasso, 0 for ridge
                          )
-#lr_lasso_coefs_fsstmp <- coef(lr_lasso_fsstmp_cv, s="lambda.min") %>% as.matrix()
-#lr_lasso_coefs_fsstmp, to see what vars go to zero
+
 
 fsfoods_ridge_cv <- cv.glmnet(fsfoods.x.train, #MATRIX without our Y COLUMN
                          fsfoods.y.train, #VECTOR - our Y COLUMN
                          family = binomial(link = "logit"),
                          alpha = 0,
                          weights = train.weights#1 for lasso, 0 for ridge
-)
+                          )
 
 #Find and extract minimizing lambda values
 plot(fsfoods_lasso_cv)
@@ -119,8 +122,21 @@ fsfoods_ridge_f1 <- glmnet(fsfoods.x.train, fsfoods.y.train,
                       family = binomial(link = "logit"), alpha = 0,
                       lambda = best_ridge_lambda) #this lambda is what actually tunes the model
 #----Random Forest----
+#Create big tree, then prune
+set.seed(123432456)
+ctree <- rpart(FSFOODS ~ hhsize + married + education + elderly +
+                 kids + black + hispanic + female+ faminc_cleaned,
+               data = train.df, #training data, NOT original data
+               method = "class",
+               control = rpart.control(cp = 0.0001, minsplit = 1))
 
-#----Clustering---
+printcp(ctree)
+
+optimalcp <- ctree$cptable[which.min(ctree$cptable[,"xerror"]),"CP"]
+#gives you the optimal complexity parameter (cp of tree with smallest xerror)
+#prune to create tuned tree
+ctree2 <- prune(ctree, cp = optimalcp)
+rpart.plot(ctree2)
 
 #----Compare Models' Performances----
 #First, on the testing data split
@@ -128,15 +144,6 @@ test.df.cpspreds <- test.df %>%
   mutate(
     mle_pred = predict(lr_mle_fsfoods, test.df, type = "response"),
     fmle_pred = predict(lr_fmle_fsfoods, test.df, type = "response"),
-    #note: lasso and ridge get the MATRIX x.test 
-    lasso_pred = predict(fsfoods_lasso_f1, fsfoods.x.test, type = "response")[,1],
-    ridge_pred = predict(fsfoods_ridge_f1, fsfoods.x.test, type = "response")[,1]
-    #note: ALL NEED type = "response" so we don't get log-odds in our result
-  )
-#Then, on the acs data THIS NEEDS TO BE CHANGED TO REF THE ACTUAL ACS
-test.df.acspreds <- test.df %>% 
-  mutate(
-    mle_pred = predict(lr_mle_fsfoods, test.df, type = "response"),
     #note: lasso and ridge get the MATRIX x.test 
     lasso_pred = predict(fsfoods_lasso_f1, fsfoods.x.test, type = "response")[,1],
     ridge_pred = predict(fsfoods_ridge_f1, fsfoods.x.test, type = "response")[,1]
@@ -167,9 +174,9 @@ mle_data <- data.frame(
 #make data frame of Firth's ROC info
 fmle_data<- data.frame(
   Model = "Firth's",
-  Specificity = mle_rocCurve$specificities,
-  Sensitivity = mle_rocCurve$sensitivities,
-  AUC = as.numeric(mle_rocCurve$auc)
+  Specificity = fmle_rocCurve$specificities,
+  Sensitivity = fmle_rocCurve$sensitivities,
+  AUC = as.numeric(fmle_rocCurve$auc)
 )
 #make data frame of lasso ROC info
 lasso_data <- data.frame(
@@ -190,7 +197,7 @@ ridge_data <- data.frame(
 roc_data <- rbind(mle_data, fmle_data, lasso_data, ridge_data)
 
 
-# Plot the data - all your model curves are on the same plot now!
+# Plot the data
 ggplot() +
   geom_line(aes(x = 1 - Specificity, y = Sensitivity, color = Model),data = roc_data) +
   geom_text(data = roc_data %>% group_by(Model) %>% slice(1), 
@@ -199,3 +206,13 @@ ggplot() +
   scale_colour_brewer(palette = "Paired") +
   labs(x = "1 - Specificity", y = "Sensitivity", color = "Model") +
   theme_minimal()
+
+#Then, compare performance on the ACS data THIS NEEDS TO BE CHANGED TO REF THE ACTUAL ACS
+test.df.acspreds <- test.df %>% 
+  mutate(
+    mle_pred = predict(lr_mle_fsfoods, test.df, type = "response"),
+    #note: lasso and ridge get the MATRIX x.test 
+    lasso_pred = predict(fsfoods_lasso_f1, fsfoods.x.test, type = "response")[,1],
+    ridge_pred = predict(fsfoods_ridge_f1, fsfoods.x.test, type = "response")[,1]
+    #note: ALL NEED type = "response" so we don't get log-odds in our result
+  )
