@@ -90,7 +90,6 @@ cps_data <- cps_data %>% mutate(
     faminc == 843 ~ "150000+",
     TRUE ~ NA_character_
   )
-  
 )
 
 
