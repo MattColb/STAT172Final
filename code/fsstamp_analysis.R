@@ -6,6 +6,8 @@ library(tibble)
 library(ggthemes)
 library(logistf)
 library(glmnet)
+library(rpart)
+library(rpart.plot)
 library(haven)
 library(pROC)
 library(RColorBrewer)
@@ -35,12 +37,12 @@ test.df.preds <- test.df
 #   Food Stamp Analysis   #
 ###########################
 
-#Work all the way through a random forest and lr model with most significant vars
 #Create more visualizations
 #Include income?
 #Choose a model to use
 #Combine FSSTMP and WROUTY to see if there are big differences
 #Integrate Phuong's Cluster?
+#RF mtry
 
 ###########################################
 ##  Adding all interaction/squared terms ##
@@ -54,22 +56,24 @@ reduced_test = test.df %>%
   select(c("hhsize", "female", "hispanic", "black",
            "kids", "elderly", "education", "married", "FSSTMPVALC_bin"))
 
-for(i in 1:8){
-  for (j in i:8){
-    col1 = colnames(reduced_train)[i][1]
-    col2 = colnames(reduced_train)[j][1]
-    col_str = paste(col1, col2, sep="_")
-    
-    reduced_train = reduced_train %>% 
-      mutate(interaction_term = (reduced_train[col1] * reduced_train[col2])[,1])
-    reduced_test = reduced_test %>% 
-      mutate(interaction_term = (reduced_test[col1] * reduced_test[col2])[,1])
-    
-    names(reduced_train)[names(reduced_train) == "interaction_term"] = col_str
-    names(reduced_test)[names(reduced_test) == "interaction_term"] = col_str
-  } 
+#With or without interactions/squared terms
+if(FALSE){
+  for(i in 1:8){
+    for (j in i:8){
+      col1 = colnames(reduced_train)[i][1]
+      col2 = colnames(reduced_train)[j][1]
+      col_str = paste(col1, col2, sep="_")
+      
+      reduced_train = reduced_train %>% 
+        mutate(interaction_term = (reduced_train[col1] * reduced_train[col2])[,1])
+      reduced_test = reduced_test %>% 
+        mutate(interaction_term = (reduced_test[col1] * reduced_test[col2])[,1])
+      
+      names(reduced_train)[names(reduced_train) == "interaction_term"] = col_str
+      names(reduced_test)[names(reduced_test) == "interaction_term"] = col_str
+    } 
+  }
 }
-
 
 ###########################
 #   Train Test Split      #
@@ -195,26 +199,31 @@ plot(ridge_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #.800 (.684,.810)
 
 ridge_fsstmp_pi_star <- coords(ridge_fsstmp_rocCurve, "best", ref="threshold")$threshold[1]
 
-
-
-
-
 #########################
 #     Random Forest     #
 #########################
 
+rf_train <- reduced_train %>% select(-c("FSSTMPVALC_bin")) %>% 
+  mutate(
+    FSSTMPVALC_bin_fact = train.df$FSSTMPVALC_bin_fact
+  )
 
+rf_test <- reduced_test %>% select(-c("FSSTMPVALC_bin")) %>% 
+  mutate(
+    FSSTMPVALC_bin_fact = test.df$FSSTMPVALC_bin_fact
+  )
 
 rf_init_fsstmp <- randomForest(FSSTMPVALC_bin_fact ~ .,
-                              data=reduced_train,
+                              data=rf_train,
                               mtry=3,
                               ntree=1000,
                               importance=TRUE)
 
 #Multiple mtry
 
-pi_hat <- predict(rf_init_fsstmp, reduced_test, type="prob")[,"Yes"]
-rf_rocCurve <- roc(response=test.df$FSSTMPVALC_bin_fact,
+pi_hat <- predict(rf_init_fsstmp, rf_test, type="prob")[,"Yes"]
+
+rf_rocCurve <- roc(response=rf_test$FSSTMPVALC_bin_fact,
                 predictor=pi_hat,
                 levels=c("No", "Yes"))
 
@@ -234,15 +243,34 @@ rf_vi$Variable <- rownames(rf_vi)
 
 rf_vi <- rf_vi %>% arrange(desc(MeanDecreaseAccuracy))
 
-model_building = data.frame(number_of_variables=rep(NA, nrow(rf_vi)), BIC=rep(NA, nrow(rf_vi)))
-previous_BIC = 100000000
+#####################
+# Tree              #
+#####################
 
-i <- 1
-while (i == 1){
-  i <- 0
-}
+ctree <- rpart(FSSTMPVALC_bin_fact ~ .,
+               data=rf_train,
+               method="class",
+               control=rpart.control(cp=.0001, minsplit=1))
 
-#Build with best model so far from there
+optimalcp <- ctree$cptable[which.min(ctree$cptable[,"xerror"]), "CP"]
+
+ctree_optimal <- prune(ctree, cp=optimalcp)
+
+rpart.plot(ctree_optimal)
+
+pi_hat <- predict(ctree_optimal, rf_test, type="prob")[,"Yes"]
+
+ctree_rocCurve <- roc(response=rf_test$FSSTMPVALC_bin_fact,
+                   predictor=pi_hat,
+                   levels=c("No", "Yes"))
+
+plot(ctree_rocCurve, print.thres=TRUE, print.auc=TRUE)
+
+ctree_fsstmp_pi_star <- coords(rf_rocCurve, "best", ret="threshold")$threshold[1]
+
+test.df.preds <- test.df.preds %>% mutate(
+  ctree_fsstmp_preds = as.factor(ifelse(pi_hat > ctree_fsstmp_pi_star, "Yes", "No"))
+)
 
 ###################################
 # PREDICTING FSWROUTY AND FSSTMP  #
