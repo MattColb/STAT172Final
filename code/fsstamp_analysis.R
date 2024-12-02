@@ -49,9 +49,7 @@ y_var = c("FSSTMPVALC_bin")
 #Create more visualizations
 #Choose a model to use
 #Combine FSSTMP and WROUTY to see if there are big differences
-#Integrate Phuong's Cluster?
-#RF mtry
-#AUC Graph with all models
+#Add weighted means
 
 ###########################################
 ##  Adding all interaction/squared terms ##
@@ -222,13 +220,34 @@ rf_test <- reduced_test %>% select(-c("FSSTMPVALC_bin")) %>%
 
 rf_init_fsstmp <- randomForest(FSSTMPVALC_bin_fact ~ .,
                               data=rf_train,
-                              mtry=3,
+                              mtry=floor(sqrt(length(x_vars))),
                               ntree=1000,
                               importance=TRUE)
 
 #Multiple mtry
+mtry = c(1:length(x_vars))
+keeps <- data.frame(m=rep(NA, length(mtry)),
+                     OOB_err_rate = rep(NA, length(mtry)))
 
-pi_hat <- predict(rf_init_fsstmp, rf_test, type="prob")[,"Yes"]
+for (idx in 1:length(mtry)){
+  print(paste0("Trying m = ", mtry[idx]))
+  tempforest <- randomForest(FSSTMPVALC_bin_fact ~.,
+                             data=rf_train,
+                             ntree=1000,
+                             mtry=mtry[idx])
+  keeps[idx, "m"] <- mtry[idx]
+  keeps[idx, "OOB_err_rate"] <- mean(predict(tempforest) != rf_train$FSSTMPVALC_bin_fact) #Estimates out of sample error
+}
+
+best_m <- keeps[order(keeps$OOB_err_rate),"m"][1]
+
+final_forest <- randomForest(FSSTMPVALC_bin_fact ~ .,
+                             data=rf_train,
+                             mtry=best_m,
+                             ntree=1000,
+                             importance=TRUE)
+
+pi_hat <- predict(final_forest, rf_test, type="prob")[,"Yes"]
 
 rf_rocCurve <- roc(response=rf_test$FSSTMPVALC_bin_fact,
                 predictor=pi_hat,
@@ -242,9 +261,9 @@ test.df.preds <- test.df.preds %>% mutate(
   rf_fsstmp_preds = as.factor(ifelse(pi_hat > rf_fsstmp_pi_star, "Yes", "No"))
 )
 
-varImpPlot(rf_init_fsstmp, type=1)
+varImpPlot(final_forest, type=1)
 
-rf_vi <- as.data.frame(varImpPlot(rf_init_fsstmp, type=1))
+rf_vi <- as.data.frame(varImpPlot(final_forest, type=1))
 
 rf_vi$Variable <- rownames(rf_vi)
 
