@@ -283,6 +283,61 @@ test.df.preds <- test.df.preds %>% mutate(
 # PREDICTING FSWROUTY AND FSSTMP  #
 ###################################
 
+
+#######################
+## COMPARE ALL AUCS ##
+######################
+
+mle_lr_auc <- data.frame(
+  Model = "MLE LR",
+  Specificity = lr_mle_fsstmp_rocCurve$specificities,
+  Sensitivity = lr_mle_fsstmp_rocCurve$sensitivities,
+  AUC = lr_mle_fsstmp_rocCurve$auc %>% as.numeric
+)
+
+firths_lr_auc <- data.frame(
+  Model = "Firths LR",
+  Specificity = lr_firths_fsstmp_rocCurve$specificities,
+  Sensitivity = lr_firths_fsstmp_rocCurve$sensitivities,
+  AUC = lr_firths_fsstmp_rocCurve$auc %>% as.numeric
+)
+
+lasso_lr_auc <- data.frame(
+  Model = "Lasso LR",
+  Specificity = lasso_fsstmp_rocCurve$specificities,
+  Sensitivity = lasso_fsstmp_rocCurve$sensitivities,
+  AUC = lasso_fsstmp_rocCurve$auc %>% as.numeric
+)
+
+ridge_lr_auc <- data.frame(
+  Model = "Ridge LR",
+  Specificity = ridge_fsstmp_rocCurve$specificities,
+  Sensitivity = ridge_fsstmp_rocCurve$sensitivities,
+  AUC = ridge_fsstmp_rocCurve$auc %>% as.numeric
+)
+
+ctree_auc <- data.frame(
+  Model = "Categorical Tree",
+  Specificity = ctree_rocCurve$specificities,
+  Sensitivity = ctree_rocCurve$sensitivities,
+  AUC = ctree_rocCurve$auc %>% as.numeric
+)
+
+rf_auc <- data.frame(
+  Model = "Random Forest",
+  Specificity = rf_rocCurve$specificities,
+  Sensitivity = rf_rocCurve$sensitivities,
+  AUC = rf_rocCurve$auc %>% as.numeric
+)
+
+roc_data <- rbind(mle_lr_auc, firths_lr_auc, lasso_lr_auc, ridge_lr_auc, ctree_auc, rf_auc)
+
+ggplot() +
+  geom_line(aes(x = 1 - Specificity, y = Sensitivity, color = Model),data = roc_data) +
+  scale_colour_brewer(palette = "Paired") +
+  labs(x = "1 - Specificity", y = "Sensitivity", color = "Model") +
+  theme_minimal()
+
 ################################
 #   MAKING PREDICTIONS ON ACS  #
 ################################
