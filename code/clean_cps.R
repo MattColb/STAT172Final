@@ -92,7 +92,7 @@ cps_data <- cps_data %>% mutate(
 #100  210  300  430  470  500  600  710  720  730  740  820  830  841  842  843 
 #289   94  193  284  290  495  691  691  825  862 1467 1448 2094 2776 3325 3623 
 table(cps$FAMINC)
-summary(cps)
+summary(cps_data)
 #Non-included variables (Not in ACS):
 #EMPSTAT, DIFFANY, VETSTAT
 

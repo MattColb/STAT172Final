@@ -14,7 +14,7 @@ library(randomForest)
 library(dplyr)
 
 source("./code/clean_cps.R")
-source("./code/clean_acs.R")
+#source("./code/clean_acs.R") shouldn't I only have the cps source?
 
 #Cleaning and Exploring
 summary(cps_data)
@@ -45,6 +45,11 @@ train.idx <- sample(x = 1:nrow(cps_data_f), size = .7*nrow(cps_data_f))
 train.df <- cps_data_f[train.idx,]
 test.df <- cps_data_f[-train.idx,]
 
+x_vars = c("hhsize", "female", "hispanic", "black", "faminc_cleaned",
+           "kids", "elderly", "education", "married", "donut")
+y_var = c("FSFOODS")
+
+
 #----MLE Logistic Regression----
 
 lr_mle_fsfoods <- glm(FSFOODS ~ hhsize + married + education + elderly +
@@ -54,10 +59,11 @@ lr_mle_fsfoods <- glm(FSFOODS ~ hhsize + married + education + elderly +
                      weights=weight
 )
 # Get warnings - algorithm did not converge, complete separation occurred
-summary(lr_mle_fsfoods) #grossly high standard error on alll vars
+summary(lr_mle_fsfoods) #grossly high standard error on all vars, confirms complete separation
+
 #look at the coefficients from the MLE logistic regression
-beta <- lr_mle_fsfoods %>% coef()
-beta
+lr_mle_fsfoods_beta <- lr_mle_fsfoods %>% coef()
+
 
 #---Firth's Penalized Likelihood----
 
@@ -82,10 +88,14 @@ fsfoods_lasso_cv <- cv.glmnet(fsfoods.x.train, #MATRIX without our Y COLUMN
                          alpha = 1, 
                          weights = train.weights #1 for lasso, 0 for ridge
                          )
+#lr_lasso_coefs_fsstmp <- coef(lr_lasso_fsstmp_cv, s="lambda.min") %>% as.matrix()
+#lr_lasso_coefs_fsstmp, to see what vars go to zero
+
 fsfoods_ridge_cv <- cv.glmnet(fsfoods.x.train, #MATRIX without our Y COLUMN
                          fsfoods.y.train, #VECTOR - our Y COLUMN
                          family = binomial(link = "logit"),
-                         alpha = 0 #1 for lasso, 0 for ridge
+                         alpha = 0,
+                         weights = train.weights#1 for lasso, 0 for ridge
 )
 
 #Find and extract minimizing lambda values
@@ -116,13 +126,59 @@ test.df.cpspreds <- test.df %>%
     ridge_pred = predict(final_ridge, x.test, type = "response")[,1]
     #note: ALL NEED type = "response" so we don't get log-odds in our result
   )
-#Then, on the ACS data
-test.df.acspreds <- test.df %>% 
+#Then, on the test data
+test.df.preds <- test.df %>% 
   mutate(
-    mle_pred = predict(lr_mle, test.df, type = "response"),
+    mle_pred = predict(lr_mle_fsfoods, test.df, type = "response"),
     #note: lasso and ridge get the MATRIX x.test 
-    lasso_pred = predict(final_lasso, x.test, type = "response")[,1],
-    ridge_pred = predict(final_ridge, x.test, type = "response")[,1]
+    lasso_pred = predict(fsfoods_lasso_f1, fsfoods.x.test, type = "response")[,1],
+    ridge_pred = predict(fsfoods_ridge_f1, fsfoods.x.test, type = "response")[,1]
     #note: ALL NEED type = "response" so we don't get log-odds in our result
   )
-#use her code or chatgpt code to scrape the number of elderly in each puma
+
+#Fit ROC Curves
+mle_rocCurve <- roc(response = as.factor(test.df.preds$FSFOODS), #TRUTH
+                    predictor = test.df.preds$mle_pred, #predicted probabilities of MLE
+                    levels = c("0", "1"))
+lasso_rocCurve <- roc(response = as.factor(test.df.preds$FSFOODS), #TRUTH
+                      predictor = test.df.preds$lasso_pred, #predicted probabilities of MLE
+                      levels = c("0", "1"))
+ridge_rocCurve <- roc(response = as.factor(test.df.preds$FSFOODS), #TRUTH
+                      predictor = test.df.preds$ridge_pred, #predicted probabilities of MLE
+                      levels = c("0", "1"))
+#Copy pasted plotting code from Blackboard:
+#make data frame of MLE ROC info
+mle_data <- data.frame(
+  Model = "MLE",
+  Specificity = mle_rocCurve$specificities,
+  Sensitivity = mle_rocCurve$sensitivities,
+  AUC = as.numeric(mle_rocCurve$auc)
+)
+#make data frame of lasso ROC info
+lasso_data <- data.frame(
+  Model = "Lasso",
+  Specificity = lasso_rocCurve$specificities,
+  Sensitivity = lasso_rocCurve$sensitivities,
+  AUC = lasso_rocCurve$auc %>% as.numeric
+)
+#make data frame of ridge ROC info
+ridge_data <- data.frame(
+  Model = "Ridge",
+  Specificity = ridge_rocCurve$specificities,
+  Sensitivity = ridge_rocCurve$sensitivities,
+  AUC = ridge_rocCurve$auc%>% as.numeric
+)
+
+# Combine all the data frames
+roc_data <- rbind(mle_data, lasso_data, ridge_data)
+
+
+# Plot the data - all your model curves are on the same plot now!
+ggplot() +
+  geom_line(aes(x = 1 - Specificity, y = Sensitivity, color = Model),data = roc_data) +
+  geom_text(data = roc_data %>% group_by(Model) %>% slice(1), 
+            aes(x = 0.75, y = c(0.75, 0.65, 0.55), colour = Model,
+                label = paste0(Model, " AUC = ", round(AUC, 3)))) +
+  scale_colour_brewer(palette = "Paired") +
+  labs(x = "1 - Specificity", y = "Sensitivity", color = "Model") +
+  theme_minimal()
