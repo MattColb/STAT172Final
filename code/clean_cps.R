@@ -72,7 +72,7 @@ cps_data <- cps %>% group_by(CPSID=as.factor(CPSID)) %>%
 
 cps_data <- cps_data %>% mutate(
   faminc_cleaned = case_when(
-    faminc == 100 ~ "0-4999",
+    faminc == 100 ~ "<4999",
     faminc == 210 ~ "5000-7499",
     faminc == 300 ~ "7500-9999",
     faminc == 430 ~ "10000-12499",
