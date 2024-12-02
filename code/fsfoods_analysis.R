@@ -52,6 +52,17 @@ x_vars = c("hhsize", "female", "hispanic", "black", "faminc_cleaned",
            "kids", "elderly", "education", "married", "donut")
 y_var = c("FSFOODS")
 
+## Make all necessary matrices and vectors
+fsfoods.x.train <- model.matrix(FSFOODS~hhsize + married + education + elderly +
+                                  kids + black + hispanic + female+ faminc_cleaned,
+                                data = train.df)[,-1] 
+fsfoods.x.test <- model.matrix(FSFOODS~hhsize + married + education + elderly +
+                                 kids + black + hispanic + female+ faminc_cleaned,
+                               data = test.df)[,-1]
+fsfoods.y.train <- train.df$FSFOODS %>% as.vector()
+fsfoods.y.test <- test.df$FSFOODS %>% as.vector()
+train.weights <- as.vector(train.df$weight)
+test.weights <- as.vector(test.df$weight) #not strictly necessary, for ease of reference
 
 #----MLE Logistic Regression----
 
@@ -79,17 +90,6 @@ summary(lr_fmle_fsfoods)
 lr_fmle_fsfoods_beta <- lr_fmle_fsfoods %>% coef()
 
 #----Lasso and Ridge with Basic X vars----
-## Make all necessary matrices and vectors
-fsfoods.x.train <- model.matrix(FSFOODS~hhsize + married + education + elderly +
-                                  kids + black + hispanic + female+ faminc_cleaned,
-                                data = train.df)[,-1] 
-fsfoods.x.test <- model.matrix(FSFOODS~hhsize + married + education + elderly +
-                                 kids + black + hispanic + female+ faminc_cleaned,
-                               data = test.df)[,-1]
-fsfoods.y.train <- train.df$FSFOODS %>% as.vector()
-fsfoods.y.test <- test.df$FSFOODS %>% as.vector()
-train.weights <- as.vector(train.df$weight)
-test.weights <- as.vector(test.df$weight) #not strictly necessary, for ease of reference
 
 #Use cross validation to get tuning info for final regression
 fsfoods_lasso_cv <- cv.glmnet(fsfoods.x.train, #MATRIX without our Y COLUMN
@@ -122,6 +122,61 @@ fsfoods_ridge_f1 <- glmnet(fsfoods.x.train, fsfoods.y.train,
                       family = binomial(link = "logit"), alpha = 0,
                       lambda = best_ridge_lambda) #this lambda is what actually tunes the model
 #----Random Forest----
+
+rf_train <- train.df %>% select(-c("FSFOODS")) %>% 
+  mutate(
+    FSFOODS_fact = as.factor(train.df$FSFOODS)
+  )
+
+rf_test <- test.df %>% select(-c("FSFOODS")) %>% 
+  mutate(
+    FSFOODS_fact = as.factor(test.df$FSFOODS)
+  )
+
+rf_init_fsfoods <- randomForest(FSFOODS_fact ~ hhsize + married + education + elderly +
+                                  kids + black + hispanic + female + faminc_cleaned,
+                               data=rf_train,
+                               mtry=floor(sqrt(length(x_vars))),
+                               ntree=1000,
+                               importance=TRUE)
+
+#Multiple mtry
+mtry = c(1:length(x_vars))
+keeps <- data.frame(m=rep(NA, length(mtry)),
+                    OOB_err_rate = rep(NA, length(mtry)))
+
+for (idx in 1:length(mtry)){
+  print(paste0("Trying m = ", mtry[idx]))
+  tempforest <- randomForest(FSFOODS_fact ~hhsize + married + education + elderly +
+                               kids + black + hispanic + female + faminc_cleaned,
+                             data=rf_train,
+                             ntree=1000,
+                             mtry=mtry[idx])
+  keeps[idx, "m"] <- mtry[idx]
+  keeps[idx, "OOB_err_rate"] <- mean(predict(tempforest) != rf_train$FSFOODS_fact) #Estimates out of sample error
+}
+
+best_m <- keeps[order(keeps$OOB_err_rate),"m"][1]
+
+final_forest <- randomForest(FSFOODS_fact ~ hhsize + married + education + elderly +
+                               kids + black + hispanic + female + faminc_cleaned,
+                             data=rf_train,
+                             mtry=best_m,
+                             ntree=1000,
+                             importance=TRUE)
+
+plot(rf_rocCurve, print.thres=TRUE, print.auc=TRUE)
+
+rf_pi_star <- coords(rf_rocCurve, "best", ret="threshold")$threshold[1]
+#pi star is 0.0055 idk what that means but im saving it just in case ig
+
+#making a variable importance plot based on decrease in forest accuracy
+varImpPlot(final_forest, type=1)
+rf_vi <- as.data.frame(varImpPlot(final_forest, type=1))
+rf_vi$Variable <- rownames(rf_vi)
+rf_vi <- rf_vi %>% arrange(desc(MeanDecreaseAccuracy))
+
+#----Random Tree----
 #Create big tree, then prune
 set.seed(123432456)
 ctree <- rpart(FSFOODS ~ hhsize + married + education + elderly +
@@ -144,25 +199,27 @@ test.df.cpspreds <- test.df %>%
   mutate(
     mle_pred = predict(lr_mle_fsfoods, test.df, type = "response"),
     fmle_pred = predict(lr_fmle_fsfoods, test.df, type = "response"),
-    #note: lasso and ridge get the MATRIX x.test 
     lasso_pred = predict(fsfoods_lasso_f1, fsfoods.x.test, type = "response")[,1],
-    ridge_pred = predict(fsfoods_ridge_f1, fsfoods.x.test, type = "response")[,1]
-    #note: ALL NEED type = "response" so we don't get log-odds in our result
+    ridge_pred = predict(fsfoods_ridge_f1, fsfoods.x.test, type = "response")[,1],
+    rf_pi_hat <- predict(final_forest, rf_test, type="prob")[,"1"]
   )
 
 #Fit ROC Curves on CPS
-mle_rocCurve <- roc(response = as.factor(test.df.cpspreds$FSFOODS), #TRUTH
-                    predictor = test.df.cpspreds$mle_pred, #predicted probabilities of MLE
+mle_rocCurve <- roc(response = as.factor(test.df.cpspreds$FSFOODS), 
+                    predictor = test.df.cpspreds$mle_pred, 
                     levels = c("0", "1"))
-fmle_rocCurve<- roc(response = as.factor(test.df.cpspreds$FSFOODS), #TRUTH
-                    predictor = test.df.cpspreds$fmle_pred, #predicted probabilities of MLE
+fmle_rocCurve<- roc(response = as.factor(test.df.cpspreds$FSFOODS), 
+                    predictor = test.df.cpspreds$fmle_pred, 
                     levels = c("0", "1"))
-lasso_rocCurve <- roc(response = as.factor(test.df.cpspreds$FSFOODS), #TRUTH
-                      predictor = test.df.cpspreds$lasso_pred, #predicted probabilities of MLE
+lasso_rocCurve <- roc(response = as.factor(test.df.cpspreds$FSFOODS), 
+                      predictor = test.df.cpspreds$lasso_pred, 
                       levels = c("0", "1"))
-ridge_rocCurve <- roc(response = as.factor(test.df.cpspreds$FSFOODS), #TRUTH
-                      predictor = test.df.cpspreds$ridge_pred, #predicted probabilities of MLE
+ridge_rocCurve <- roc(response = as.factor(test.df.cpspreds$FSFOODS), 
+                      predictor = test.df.cpspreds$ridge_pred, 
                       levels = c("0", "1"))
+rf_rocCurve <- roc(response=rf_test$FSFOODS_fact,
+                   predictor=pi_hat,
+                   levels=c("0", "1"))
 #PLOT CPS PREDICTIONS
 #make data frame of MLE ROC info 
 mle_data <- data.frame(
@@ -192,16 +249,23 @@ ridge_data <- data.frame(
   Sensitivity = ridge_rocCurve$sensitivities,
   AUC = ridge_rocCurve$auc%>% as.numeric
 )
+#make data frame of forest ROC info
+rf_data <- data.frame(
+  Model = "Forest",
+  Specificity = rf_rocCurve$specificities,
+  Sensitivity = rf_rocCurve$sensitivities,
+  AUC = rf_rocCurve$auc%>% as.numeric
+)
 
 # Combine all the data frames
-roc_data <- rbind(mle_data, fmle_data, lasso_data, ridge_data)
+roc_data <- rbind(mle_data, fmle_data, lasso_data, ridge_data, rf_data)
 
 
 # Plot the data
 ggplot() +
   geom_line(aes(x = 1 - Specificity, y = Sensitivity, color = Model),data = roc_data) +
   geom_text(data = roc_data %>% group_by(Model) %>% slice(1), 
-            aes(x = 0.75, y = c(0.75, 0.65, 0.55, 0.45), colour = Model,
+            aes(x = 0.75, y = c(0.85, 0.75, 0.65, 0.55, 0.45), colour = Model,
                 label = paste0(Model, " AUC = ", round(AUC, 3)))) +
   scale_colour_brewer(palette = "Paired") +
   labs(x = "1 - Specificity", y = "Sensitivity", color = "Model") +
