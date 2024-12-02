@@ -25,9 +25,7 @@ cps_data <- cps_data[!is.na(cps_data$FSWROUTY_binchar),]
 
 # cps_data <- cps_data %>% mutate(FSWROUTY_bin = as.factor(FSWROUTY_binchar))
 
-cps_data <- cps_data %>% mutate(FSWROUTY_bin = ifelse(FSWROUTY_binchar == "No", 0, 1),
-                                FSWROUTY_binchar = as.factor(FSWROUTY_binchar))
-
+cps_data <- cps_data %>% mutate(FSWROUTY_bin = ifelse(FSWROUTY_binchar == "No", 0, 1))
 summary(cps_data)
 head(cps_data)
 
@@ -35,7 +33,7 @@ head(cps_data)
 
 # set up
 data_X <- cps_data[, c( "hhsize", "female", "hispanic", "black", 
-                       "kids", "elderly", "education", "married", "faminc_cleaned")]
+                        "kids", "elderly", "education", "married", "faminc_cleaned")]
 
 # standardize all predictor columns 
 data_stand <- apply(data_X, 2, function(x)(x - mean(x))/sd(x))
@@ -52,7 +50,7 @@ plot(data_clust, labels = cps_data$FSWROUTY, hang = -1)
 rect.hclust(data_clust, k = 3, border ="red")
 
 # Making sense of the clusters, obtaining "characterization" of clusters
-data_X$h_cluster <- as.factor(cutree(data_clust, k = 4))
+data_X$h_cluster <- as.factor(cutree(data_clust, k = 5))
 data_X_long <- melt(data_X, id.vars = c("h_cluster"))
 head(data_X_long)
 ggplot(data = data_X_long) +
@@ -76,9 +74,7 @@ ggplot(data = data_X_long) +
 cps_data$h_cluster <- as.factor(cutree(data_clust, k = 5))
 
 # Combine cluster memberships with other features
-model_data <- cps_data[, c("FSWROUTY_bin","FSWROUTY_binchar", "weight", "hhsize", "female", 
-                           "hispanic", "black", "kids", "elderly", "education",
-                           "married", "faminc_cleaned")]
+model_data <- cps_data[, c("FSWROUTY_bin", "h_cluster", "weight")]
 
 # splitting training and testing
 RNGkind(sample.kind = "default")
@@ -87,10 +83,18 @@ train.idx <- sample(x=1:nrow(model_data), size=.7*nrow(model_data))
 train.df <- model_data[train.idx,]
 test.df <- model_data[-train.idx,]
 
+#############################################
+
+x_train <- model.matrix(FSWROUTY_bin ~ h_cluster
+                        , data=train.df)[,-1]
+x_test <- model.matrix(FSWROUTY_bin ~ h_cluster 
+                       , data=test.df)[,-1]
+y_test <- as.vector(test.df$FSWROUTY_bin)
+y_train <- as.vector(train.df$FSWROUTY_bin)
+
 ################ MLE #########################
 
-fswrouty_mle <- glm(FSWROUTY_bin ~ hhsize + married + education + elderly + kids 
-                    + black + hispanic + female + faminc_cleaned,
+fswrouty_mle <- glm(FSWROUTY_bin ~ h_cluster,
                     data = train.df,
                     family = binomial(link = 'logit'),
                     weights = weight)
@@ -98,24 +102,13 @@ fswrouty_mle <- glm(FSWROUTY_bin ~ hhsize + married + education + elderly + kids
 summary(fswrouty_mle)
 
 #Since all variables are seen as significant because of complete separation
-test_preds <- test.df %>% 
-  mutate(
-    mle_fswrouty_prob = predict(fswrouty_mle, test.df , type="response")
-  )
 
-mle_fswrouty_rocCurve <- roc(
-  response=as.factor(test_preds$FSWROUTY_bin),
-  predictor= test_preds$mle_fswrouty_prob,
-  levels=c("0","1"))
 
-plot(mle_fswrouty_rocCurve, print.thres=TRUE, print.auc=TRUE) 
+# Firth's Penalized Likelihood #
 
-################## Firth's Penalized Likelihood ###################
-
-firths_fswrouty <- logistf(FSWROUTY_bin ~ hhsize + married + education + elderly +
-                              kids + black + hispanic + female + faminc_cleaned,
-                            data=train.df,
-                            weights=weight)
+firths_fswrouty <- logistf(FSWROUTY_bin ~ h_cluster,
+                           data=train.df,
+                           weights=weight)
 
 summary(firths_fswrouty)
 
@@ -135,43 +128,6 @@ plot(firths_fswrouty_rocCurve, print.thres=TRUE, print.auc=TRUE)
 
 firth_fswrouty_pi_hat <- coords(firths_fswrouty_rocCurve, "best", ref="threshold")$threshold[1]
 
-
-############# RANDOM FOREST ###################
-
-rf_fswrouty <- randomForest(FSWROUTY_binchar ~ hhsize + married + faminc_cleaned +
-                              education + elderly + kids + black + hispanic + female ,
-                           data = train.df,
-                           ntree = 1000,
-                           mtry = 3,
-                           importance = TRUE)
-
-importance(rf_fswrouty)
-varImpPlot(rf_fswrouty)
-
-# Validate model as predictive tool
-
-pi_hat <- predict(rf_fswrouty, test.df, type = "prob")[, "Yes"] #Choose positive event column
-
-rf_rocCurve <- roc(response = test.df$FSWROUTY_binchar,
-                predictor = pi_hat,
-                levels = c("No", "Yes"))
-
-plot(rf_rocCurve, print.thres = TRUE, print.ouc = TRUE)
-
-auc(rf_rocCurve) 
-
-###########################################
-
-x_train <- model.matrix(FSWROUTY_bin ~ hhsize + married + education + elderly + kids 
-                  + black + hispanic + female + faminc_cleaned
-                  , data=train.df)[,-1]
-x_test <- model.matrix(FSWROUTY_bin ~ hhsize + married + education + elderly + kids 
-                       + black + hispanic + female + faminc_cleaned
-                       , data=test.df)[,-1]
-# y_train <- as.numeric(train.df$FSWROUTY_bin) - 1  # Convert factor (1, 2) to binary (0, 1)
-y_test <- as.vector(test.df$FSWROUTY_bin)
-y_train <- as.vector(train.df$FSWROUTY_bin)
-
 ########### LASSO ##################
 
 fswrouty_lasso <- cv.glmnet(x_train, y_train, family=binomial(link="logit"), alpha = 1)
@@ -184,7 +140,7 @@ lasso_model <- glmnet(x_train, y_train, family=binomial(link="logit"),
                       alpha = 1, 
                       lambda = best_lambda_lasso,
                       weights = as.vector(train.df$weight)
-                      )
+)
 # predict probability on the test set
 test_preds <- test.df %>% 
   mutate (
@@ -205,9 +161,9 @@ coef(fswrouty_ridge, s="lambda.min") %>% as.matrix()
 
 
 ridge_model <- glmnet(x_train, y_train, family=binomial(link="logit"), 
-                                     alpha = 0, 
-                                     lambda = best_lambda_lasso,
-                                     weights = as.vector(train.df$weight))
+                      alpha = 0, 
+                      lambda = best_lambda_lasso,
+                      weights = as.vector(train.df$weight))
 
 # predict probability on the test set
 test_preds <- test.df %>% 
@@ -221,58 +177,23 @@ ridge_rocCurve <- roc(response = as.factor(test_preds$FSWROUTY_bin),
 plot(ridge_rocCurve, print.thres=TRUE, print.auc=TRUE)
 
 
+############# RANDOM FOREST ###################
 
-########## COMBINE ROC CURVE ################
+rf_fswrouty <- randomForest(FSWROUTY_bin ~ h_cluster,
+                            data = train.df,
+                            ntree = 1000,
+                            mtry = 3,
+                            importance = TRUE)
 
-#make data frame of MLE ROC info
-mle_data_fswrouty <- data.frame(
-  Model = "MLE",
-  Specificity = mle_fswrouty_rocCurve$specificities,
-  Sensitivity = mle_fswrouty_rocCurve$sensitivities,
-  AUC = as.numeric(mle_fswrouty_rocCurve$auc)
-)
+# Validate model as predictive tool
 
-#make data frame of Firths ROC info
-firths_data_fswrouty <- data.frame(
-  Model = "Firths",
-  Specificity = firths_fswrouty_rocCurve$specificities,
-  Sensitivity = firths_fswrouty_rocCurve$sensitivities,
-  AUC = as.numeric(firths_fswrouty_rocCurve$auc)
-)
+pi_hat <- predict(rf_fswrouty, test.df, type = "prob")[, "Yes"] #Choose positive event column
 
-#make data frame of lasso ROC info
-lasso_data_fswrouty <- data.frame(
-  Model = "Lasso",
-  Specificity = lasso_rocCurve$specificities,
-  Sensitivity = lasso_rocCurve$sensitivities,
-  AUC = lasso_rocCurve$auc %>% as.numeric
-)
-#make data frame of ridge ROC info
-ridge_data_fswrouty <- data.frame(
-  Model = "Ridge",
-  Specificity = ridge_rocCurve$specificities,
-  Sensitivity = ridge_rocCurve$sensitivities,
-  AUC = ridge_rocCurve$auc%>% as.numeric
-)
+rocCurve <- roc(response = test.df$FSWROUTY_bin,
+                predictor = pi_hat,
+                levels = c("No", "Yes"))
 
-# Combine all the data frames
-roc_data <- rbind(mle_data_fswrouty, firths_data_fswrouty, lasso_data_fswrouty, ridge_data_fswrouty)
+plot(rocCurve, print.thres = TRUE, print.ouc = TRUE)
 
-
-# Plot the data
-ggplot() +
-  geom_line(aes(x = 1 - Specificity, y = Sensitivity, color = Model),data = roc_data) +
-  geom_text(data = roc_data %>% group_by(Model) %>% slice(1), 
-            aes(x = 0.75, y = c(0.75, 0.65, 0.55, 0.45), colour = Model,
-                label = paste0(Model, " AUC = ", round(AUC, 4)))) +
-  scale_colour_brewer(palette = "Paired") +
-  labs(x = "1 - Specificity", y = "Sensitivity", color = "Model") +
-  theme_minimal()
-
-
-
-
-
-
-
+auc(rocCurve)
 

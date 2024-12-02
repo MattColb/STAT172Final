@@ -40,13 +40,15 @@ acs_data <- acs_data %>% group_by(serialno = as.factor(serialno)) %>%
             married = sum(MARRIED),
             weight = weight[1],
             faminc_cleaned = first(AGI),
+            faminc = first(AGI),
             donut = ifelse(hhsize == (elderly+kids), 1, 0))
 
 head(acs_data)
 
 acs_data <- acs_data %>% mutate(
   faminc_cleaned = case_when(
-    faminc_cleaned >= 0 & faminc_cleaned < 7500 ~ "0-7499",
+    faminc_cleaned < 5000 ~ "<4999",
+    faminc_cleaned >= 5000 & faminc_cleaned < 7500 ~ "5000-7499",
     faminc_cleaned >= 7500 & faminc_cleaned < 10000 ~ "7500-9999",
     faminc_cleaned >= 10000 & faminc_cleaned < 12500 ~ "10000-12499",
     faminc_cleaned >= 12500 & faminc_cleaned < 15000 ~ "12500-14999",
