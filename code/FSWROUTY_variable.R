@@ -13,7 +13,7 @@ library(randomForest)
 library(ggplot2)
 library(reshape2)
 library(randomForest)
-
+library(logistf)
 
 source("code/clean_cps.R")
 
@@ -23,8 +23,9 @@ cps_data$FSWROUTY_binchar <- ifelse(cps_data$FSWROUTY == 0, "No", "Yes")
 # handle missing values
 cps_data <- cps_data[!is.na(cps_data$FSWROUTY_binchar),]
 
-cps_data <- cps_data %>% mutate(FSWROUTY_bin = as.factor(FSWROUTY_binchar))
+# cps_data <- cps_data %>% mutate(FSWROUTY_bin = as.factor(FSWROUTY_binchar))
 
+cps_data <- cps_data %>% mutate(FSWROUTY_bin = ifelse(FSWROUTY_binchar == "No", 0, 1))
 summary(cps_data)
 head(cps_data)
 
@@ -68,9 +69,9 @@ ggplot(data = data_X_long) +
 #           => big family size with children and elderly  
 # Cluster 5: Outliers or Minimal Engagement
 
-##########################################
+
 ############ Train Test Split ############
-#########################################
+
 
 # Add cluster membership back to the main dataset
 cps_data$h_cluster <- as.factor(cutree(data_clust, k = 5))
@@ -86,14 +87,14 @@ train.idx <- sample(x=1:nrow(model_data), size=.7*nrow(model_data))
 train.df <- model_data[train.idx,]
 test.df <- model_data[-train.idx,]
 
-##############################################
-################ MLE #########################
-##############################################
 
-fswrouty_mle <- glm(FSWROUTY_bin ~ h_cluster + weight +hhsize + married + 
+################ MLE #########################
+
+fswrouty_mle <- glm(FSWROUTY_bin ~ h_cluster +hhsize + married + 
                       education + elderly + kids + black + hispanic + female,
                     data = train.df,
-                    family = binomial(link = 'logit'))
+                    family = binomial(link = 'logit'),
+                    weights = weight)
 
 summary(fswrouty_mle)
 # weight has a strong positive effect: Higher weights increase the likelihood of "Yes."
@@ -102,23 +103,41 @@ summary(fswrouty_mle)
 
 # Evaluate Model Accuracy 
 test_pred_probs <- predict(fswrouty_mle, newdata = test.df, type = "response")
-test_pred_classes <- ifelse(test_pred_probs > 0.5, "Yes", "No")
+# test_pred_classes <- ifelse(test_pred_probs > 0.5, "Yes", "No")
+test_pred_classes <- ifelse(test_pred_probs > 0.5, "1", "0")
 library(caret)
 confusionMatrix(as.factor(test_pred_classes), test.df$FSWROUTY_bin)
 
-# the model correctly classifies 67.45% of all instances.
-# sensitivity = 46/(232 + 46) = 16.55%
-# specificity = 497/(497 + 30) = 94.31%
 
-###############################################
+#Since all variables are seen as significant because of complete separation
+
+
+# Firth's Penalized Likelihood #
+
+firths_fswrouty <- logistf(FSWROUTY_bin ~ h_cluster + hhsize + married + education + elderly +
+                              kids + black + hispanic + female,
+                            data=train.df,
+                            weights=weight)
+
+summary(firths_fswrouty)
+
+
+# Evaluate Model Accuracy 
+test_pred_probs2 <- predict(firths_fswrouty, newdata = test.df, type = "response")
+test_pred_classes2 <- ifelse(test_pred_probs2 > 0.5, "Yes", "No")
+library(caret)
+confusionMatrix(as.factor(test_pred_classes2), test.df$FSWROUTY_bin)
+
+# The accuracy improves to 66.46%
+
+
 ############# RANDOM FOREST ###################
-##############################################
 
-rf_fswrouty <- randomForest(FSWROUTY_bin ~ h_cluster + weight +hhsize + married + 
+rf_fswrouty <- randomForest(FSWROUTY_bin ~ h_cluster +hhsize + married + 
                               education + elderly + kids + black + hispanic + female ,
                            data = train.df,
                            ntree = 1000,
-                           mtry = 4,
+                           mtry = 3,
                            importance = TRUE)
 
 importance(rf_fswrouty)
@@ -133,21 +152,68 @@ rocCurve <- roc(response = test.df$FSWROUTY_bin,
 
 plot(rocCurve, print.thres = TRUE, print.ouc = TRUE)
 
-# 72.3% of positive cases are correctly classified
-# 49.7% of negative cases are misclassified as positive
-
-auc(rocCurve) # Area under the curve: 0.6225
+auc(rocCurve) # Area under the curve: 0.6413
 
 
+###########################################
+
+x_train <- model.matrix(FSWROUTY_bin ~ h_cluster + hhsize + married + education + elderly + kids 
+                  + black + hispanic + female
+                  , data=train.df)[,-1]
+x_test <- model.matrix(FSWROUTY_bin ~ h_cluster + hhsize + married + education + elderly + kids 
+                       + black + hispanic + female
+                       , data=test.df)[,-1]
+# y_train <- as.numeric(train.df$FSWROUTY_bin) - 1  # Convert factor (1, 2) to binary (0, 1)
+y_test <- as.vector(test.df$FSWROUTY_bin)
+y_train <- as.vector(train.df$FSWROUTY_bin)
+
+########### LASSO ##################
+
+fswrouty_lasso <- cv.glmnet(x_train, y_train, family=binomial(link="logit"), alpha = 1)
+plot(fswrouty_lasso)
+best_lambda_lasso <- fswrouty_lasso$lambda.min
+coef(fswrouty_lasso, s="lambda.min") %>% as.matrix()
+# cluster 2, 4, and 5 went to 0
+
+lasso_model <- glmnet(x_train, y_train, family=binomial(link="logit"), 
+                      alpha = 1, 
+                      lambda = best_lambda_lasso,
+                      weights = as.vector(train.df$weight)
+                      )
+# predict probability on the test set
+test_preds <- test.df %>% 
+  mutate (
+    lasso_prob = predict(lasso_model, x_test, type = "response"))
+
+lasso_rocCurve <- roc(response = as.factor(test_preds$FSWROUTY_bin),
+                      predictor = test_preds$lasso_prob,
+                      levels = c("0", "1"))
+
+plot(lasso_rocCurve, print.thres=TRUE, print.auc=TRUE)
+
+########### RIDGE ##############
+
+fswrouty_ridge <- cv.glmnet(x_train, y_train, family=binomial(link="logit"), alpha = 0)
+plot(fswrouty_ridge)
+best_lambda_ridge <- fswrouty_ridge$lambda.min
+coef(fswrouty_ridge, s="lambda.min") %>% as.matrix()
 
 
+ridge_model <- glmnet(x_train, y_train, family=binomial(link="logit"), 
+                                     alpha = 0, 
+                                     lambda = best_lambda_lasso,
+                                     weights = as.vector(train.df$weight))
 
+# predict probability on the test set
+test_preds <- test.df %>% 
+  mutate (
+    ridge_prob = predict(ridge_model, x_test, type = "response"))
 
+ridge_rocCurve <- roc(response = as.factor(test_preds$FSWROUTY_bin),
+                      predictor = test_preds$ridge_prob,
+                      levels = c("0", "1"))
 
-
-
-
-
+plot(ridge_rocCurve, print.thres=TRUE, print.auc=TRUE)
 
 
 
