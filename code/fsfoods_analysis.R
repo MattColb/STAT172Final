@@ -11,6 +11,7 @@ library(haven)
 library(pROC)
 library(RColorBrewer)
 library(randomForest)
+library(dplyr)
 
 source("./code/clean_cps.R")
 source("./code/clean_acs.R")
@@ -34,7 +35,7 @@ head(cps_data)
 summary(cps_data$FSFOODS) #FSFOODS has 1755 NA's
 cps_data_f <- cps_data[!is.na(cps_data$FSFOODS),]
 summary(cps_data_f$FSFOODS) #new subset without NAs has 6665 obs, compared to 8420 originally
-
+summary(cps_data_f)
 
 
 #Split the data into train/test df forms to use in lasso/ridge later
@@ -63,7 +64,6 @@ beta
 
 #----Lasso and Ridge with Basic X vars----
 ## Make all necessary matrices and vectors
-#ADD WEIGHTS TO THESE OH DEAR
 fsfoods.x.train <- model.matrix(FSFOODS~hhsize + married + education + elderly +
                                   kids + black + hispanic + female,
                                 data = train.df)[,-1] 
@@ -79,8 +79,9 @@ test.weights <- as.vector(test.df$weight) #not strictly necessary, for ease of r
 fsfoods_lasso_cv <- cv.glmnet(fsfoods.x.train, #MATRIX without our Y COLUMN
                          fsfoods.y.train, #VECTOR - our Y COLUMN
                          family = binomial(link = "logit"),
-                         alpha = 1 #1 for lasso, 0 for ridge
-)
+                         alpha = 1, 
+                         weights = train.weights #1 for lasso, 0 for ridge
+                         )
 fsfoods_ridge_cv <- cv.glmnet(fsfoods.x.train, #MATRIX without our Y COLUMN
                          fsfoods.y.train, #VECTOR - our Y COLUMN
                          family = binomial(link = "logit"),
@@ -124,3 +125,4 @@ test.df.acspreds <- test.df %>%
     ridge_pred = predict(final_ridge, x.test, type = "response")[,1]
     #note: ALL NEED type = "response" so we don't get log-odds in our result
   )
+#use her code or chatgpt code to scrape the number of elderly in each puma
