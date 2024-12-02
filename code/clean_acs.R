@@ -38,7 +38,8 @@ acs_data <- acs_data %>% group_by(serialno = as.factor(serialno)) %>%
             elderly = sum(ELDERLY),
             education = sum(EDUC),
             married = sum(MARRIED),
-            weight = weight[1])
+            weight = weight[1],
+            faminc_cleaned = first(AGI))
 
 head(acs_data)
 

@@ -16,6 +16,8 @@ library(randomForest)
 source("./code/clean_cps.R")
 source("./code/clean_acs.R")
 
+include_squared_interaction = TRUE
+
 cps_data <- as.data.frame(cps_data)
 
 cps_data <- cps_data %>% mutate(
@@ -38,7 +40,6 @@ test.df.preds <- test.df
 ###########################
 
 #Create more visualizations
-#Include income?
 #Choose a model to use
 #Combine FSSTMP and WROUTY to see if there are big differences
 #Integrate Phuong's Cluster?
@@ -49,17 +50,17 @@ test.df.preds <- test.df
 ###########################################
 
 reduced_train = train.df %>% 
-  select(c("hhsize", "female", "hispanic", "black",
+  select(c("hhsize", "female", "hispanic", "black", "faminc_cleaned",
            "kids", "elderly", "education", "married", "FSSTMPVALC_bin"))
 
 reduced_test = test.df %>% 
-  select(c("hhsize", "female", "hispanic", "black",
+  select(c("hhsize", "female", "hispanic", "black", "faminc_cleaned",
            "kids", "elderly", "education", "married", "FSSTMPVALC_bin"))
 
 #With or without interactions/squared terms
-if(FALSE){
-  for(i in 1:8){
-    for (j in i:8){
+if(include_squared_interaction){
+  for(i in 1:9){
+    for (j in i:9){
       col1 = colnames(reduced_train)[i][1]
       col2 = colnames(reduced_train)[j][1]
       col_str = paste(col1, col2, sep="_")
@@ -284,19 +285,21 @@ test.df.preds <- test.df.preds %>% mutate(
 
 acs_reduced_test = acs_data %>% 
   select(c("hhsize", "female", "hispanic", "black",
-           "kids", "elderly", "education", "married"))
+           "kids", "elderly", "education", "married", "faminc_cleaned"))
 
-for(i in 1:8){
-  for (j in i:8){
-    col1 = colnames(acs_reduced_test)[i][1]
-    col2 = colnames(acs_reduced_test)[j][1]
-    col_str = paste(col1, col2, sep="_")
-    
-    acs_reduced_test = acs_reduced_test %>% 
-      mutate(interaction_term = (acs_reduced_test[col1] * acs_reduced_test[col2])[,1])
-    
-    names(acs_reduced_test)[names(acs_reduced_test) == "interaction_term"] = col_str
-  } 
+if(include_squared_interaction){
+  for(i in 1:9){
+    for (j in i:9){
+      col1 = colnames(acs_reduced_test)[i][1]
+      col2 = colnames(acs_reduced_test)[j][1]
+      col_str = paste(col1, col2, sep="_")
+      
+      acs_reduced_test = acs_reduced_test %>% 
+        mutate(interaction_term = (acs_reduced_test[col1] * acs_reduced_test[col2])[,1])
+      
+      names(acs_reduced_test)[names(acs_reduced_test) == "interaction_term"] = col_str
+    } 
+  }
 }
 
 acs_test_data <- model.matrix(~., data=acs_reduced_test)[,-1]
@@ -335,8 +338,8 @@ ggplot(data = map_data) +
   geom_sf(aes(fill = proportion_on_assistance)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
   theme_minimal() +
-  labs(title = "Proportion of Households with Senior",
-       fill = "Proportion of\nHouseholds with\nSeniors")
+  labs(title = "Proportion of Households on SNAP/Food Stamps",
+       fill = "Proportion on\nFood Stamps/SNAP")
 
 ggplot(data = map_data) +
   geom_sf(aes(fill = proportion_has_senior)) +
