@@ -178,7 +178,7 @@ rf_vi <- rf_vi %>% arrange(desc(MeanDecreaseAccuracy))
 
 #----Random Tree----
 #Create big tree, then prune
-set.seed(123432456)
+set.seed(578493768)
 ctree <- rpart(FSFOODS ~ hhsize + married + education + elderly +
                  kids + black + hispanic + female+ faminc_cleaned,
                data = train.df, #training data, NOT original data
@@ -201,7 +201,8 @@ test.df.cpspreds <- test.df %>%
     fmle_pred = predict(lr_fmle_fsfoods, test.df, type = "response"),
     lasso_pred = predict(fsfoods_lasso_f1, fsfoods.x.test, type = "response")[,1],
     ridge_pred = predict(fsfoods_ridge_f1, fsfoods.x.test, type = "response")[,1],
-    rf_pi_hat <- predict(final_forest, rf_test, type="prob")[,"1"]
+    rf_pi_hat = predict(final_forest, rf_test, type="prob")[,"1"],
+    rt_pi_hat = predict(ctree2, test.df, type = "prob")[,"1"]
   )
 
 #Fit ROC Curves on CPS
@@ -218,8 +219,11 @@ ridge_rocCurve <- roc(response = as.factor(test.df.cpspreds$FSFOODS),
                       predictor = test.df.cpspreds$ridge_pred, 
                       levels = c("0", "1"))
 rf_rocCurve <- roc(response=rf_test$FSFOODS_fact,
-                   predictor=pi_hat,
+                   predictor=test.df.cpspreds$rf_pi_hat,
                    levels=c("0", "1"))
+rt_rocCurve <- roc(response = as.factor(test.df.cpspreds$FSFOODS), 
+                   predictor = test.df.cpspreds$rt_pi_hat, 
+                   levels = c("0", "1"))
 #PLOT CPS PREDICTIONS
 #make data frame of MLE ROC info 
 mle_data <- data.frame(
@@ -256,16 +260,22 @@ rf_data <- data.frame(
   Sensitivity = rf_rocCurve$sensitivities,
   AUC = rf_rocCurve$auc%>% as.numeric
 )
-
+#make data frame of tree ROC info
+rt_data <- data.frame(
+  Model = "Tree",
+  Specificity = rt_rocCurve$specificities,
+  Sensitivity = rt_rocCurve$sensitivities,
+  AUC = rt_rocCurve$auc%>% as.numeric
+)
 # Combine all the data frames
-roc_data <- rbind(mle_data, fmle_data, lasso_data, ridge_data, rf_data)
+roc_data <- rbind(mle_data, fmle_data, lasso_data, ridge_data, rf_data, rt_data)
 
 
 # Plot the data
 ggplot() +
   geom_line(aes(x = 1 - Specificity, y = Sensitivity, color = Model),data = roc_data) +
   geom_text(data = roc_data %>% group_by(Model) %>% slice(1), 
-            aes(x = 0.75, y = c(0.85, 0.75, 0.65, 0.55, 0.45), colour = Model,
+            aes(x = 0.75, y = c(0.85, 0.75, 0.65, 0.55, 0.45, 0.35), colour = Model,
                 label = paste0(Model, " AUC = ", round(AUC, 3)))) +
   scale_colour_brewer(palette = "Paired") +
   labs(x = "1 - Specificity", y = "Sensitivity", color = "Model") +
