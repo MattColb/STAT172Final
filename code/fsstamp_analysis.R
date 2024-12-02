@@ -35,24 +35,49 @@ test.df.preds <- test.df
 #   Food Stamp Analysis   #
 ###########################
 
-#Things to think about/do
-#Fit a random forest
-#Fit a cluster?
-#What are the weights doing?
-#Think about what I could do with NA values
-#Make plots/clean up ROC plots
+#Work all the way through a random forest and lr model with most significant vars
+#Create more visualizations
+#Include income?
+#Choose a model to use
+#Combine FSSTMP and WROUTY to see if there are big differences
+#Integrate Phuong's Cluster?
+
+###########################################
+##  Adding all interaction/squared terms ##
+###########################################
+
+reduced_train = train.df %>% 
+  select(c("hhsize", "female", "hispanic", "black",
+           "kids", "elderly", "education", "married", "FSSTMPVALC_bin"))
+
+reduced_test = test.df %>% 
+  select(c("hhsize", "female", "hispanic", "black",
+           "kids", "elderly", "education", "married", "FSSTMPVALC_bin"))
+
+for(i in 1:8){
+  for (j in i:8){
+    col1 = colnames(reduced_train)[i][1]
+    col2 = colnames(reduced_train)[j][1]
+    col_str = paste(col1, col2, sep="_")
+    
+    reduced_train = reduced_train %>% 
+      mutate(interaction_term = (reduced_train[col1] * reduced_train[col2])[,1])
+    reduced_test = reduced_test %>% 
+      mutate(interaction_term = (reduced_test[col1] * reduced_test[col2])[,1])
+    
+    names(reduced_train)[names(reduced_train) == "interaction_term"] = col_str
+    names(reduced_test)[names(reduced_test) == "interaction_term"] = col_str
+  } 
+}
+
 
 ###########################
 #   Train Test Split      #
 ###########################
-FSSTMP.x.train <- model.matrix(FSSTMPVALC_bin ~ hhsize + married + 
-                                 education + elderly +
-                                 kids + black + hispanic + female
-                               , data=train.df)[,-1]
-FSSTMP.x.test <- model.matrix(FSSTMPVALC_bin ~ hhsize + married + 
-                                education + elderly +
-                                kids + black + hispanic + female
-                              , data=test.df)[,-1]
+FSSTMP.x.train <- model.matrix(FSSTMPVALC_bin ~ .
+                               , data=reduced_train)[,-1]
+FSSTMP.x.test <- model.matrix(FSSTMPVALC_bin ~ .
+                              , data=reduced_test)[,-1]
 FSSTMP.y.train <- as.vector(train.df$FSSTMPVALC_bin)
 FSSTMP.y.test <- as.vector(test.df$FSSTMPVALC_bin)
 train.weights <- as.vector(train.df$weight)
@@ -62,11 +87,10 @@ test.weights <- as.vector(test.df$weight)
 # MLE Logistic Regression #
 ###########################
 
-lr_mle_fsstmp <- glm(FSSTMPVALC_bin ~ hhsize + married + education + elderly +
-                       kids + black + hispanic + female,
-                     data=train.df,
+lr_mle_fsstmp <- glm(FSSTMPVALC_bin ~ .,
+                     data=reduced_train,
                      family=binomial(link="logit"),
-                     weights=weight
+                     weights=train.weights
 )
 
 summary(lr_mle_fsstmp) #Complete separation because of EXTREMELY high standard errors
@@ -74,7 +98,7 @@ lr_mle_fsstmp_beta <- lr_mle_fsstmp %>% coef()
 
 test.df.preds <- test.df.preds %>% 
   mutate(
-    lr_mle_fsstmp_preds = predict(lr_mle_fsstmp, test.df, type="response")
+    lr_mle_fsstmp_preds = predict(lr_mle_fsstmp, reduced_test, type="response")
   )
 
 lr_mle_fsstmp_rocCurve <- roc(
@@ -86,23 +110,20 @@ plot(lr_mle_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #.514 AUC (.978, 
 
 lr_mle_fsstmp_pi_star <- coords(lr_mle_fsstmp_rocCurve, "best", ref="threshold")$threshold[1]
 
-#Since all variables are seen as significant because of complete separation
-
 ################################
 # Firth's Penalized Likelihood #
 ################################
 
-lr_firths_fsstmp <- logistf(FSSTMPVALC_bin ~ hhsize + married + education + elderly +
-                              kids + black + hispanic + female,
-                            data=train.df,
-                            weights=weight)
+lr_firths_fsstmp <- logistf(FSSTMPVALC_bin ~ .,
+                            data=reduced_train,
+                            weights=train.weights)
 
 summary(lr_firths_fsstmp)
 
 lr_firths_fsstmp_beta <- lr_firths_fsstmp %>% coef()
 
 test.df.preds <- test.df.preds %>% mutate(
-  lr_firths_fsstmp_preds = predict(lr_firths_fsstmp, test.df, type="response")
+  lr_firths_fsstmp_preds = predict(lr_firths_fsstmp, reduced_test, type="response")
 )
 
 lr_firths_fsstmp_rocCurve <- roc(
@@ -174,20 +195,25 @@ plot(ridge_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #.800 (.684,.810)
 
 ridge_fsstmp_pi_star <- coords(ridge_fsstmp_rocCurve, "best", ref="threshold")$threshold[1]
 
+
+
+
+
 #########################
 #     Random Forest     #
 #########################
 
-rf_init_fsstmp <- randomForest(FSSTMPVALC_bin_fact ~ hhsize + married + education + elderly +
-                              kids + black + hispanic + female,
-                              data=train.df,
+
+
+rf_init_fsstmp <- randomForest(FSSTMPVALC_bin_fact ~ .,
+                              data=reduced_train,
                               mtry=3,
                               ntree=1000,
                               importance=TRUE)
 
 #Multiple mtry
 
-pi_hat <- predict(rf_init_fsstmp, test.df, type="prob")[,"Yes"]
+pi_hat <- predict(rf_init_fsstmp, reduced_test, type="prob")[,"Yes"]
 rf_rocCurve <- roc(response=test.df$FSSTMPVALC_bin_fact,
                 predictor=pi_hat,
                 levels=c("No", "Yes"))
@@ -222,82 +248,30 @@ while (i == 1){
 # PREDICTING FSWROUTY AND FSSTMP  #
 ###################################
 
-
-########################################
-##  Loops for Squared/Interaction Term #
-########################################
-
-reduced_train = train.df %>% 
-  select(c("hhsize", "female", "hispanic", "black",
-           "kids", "elderly", "education", "married", "FSSTMPVALC_bin"))
-
-reduced_test = test.df %>% 
-  select(c("hhsize", "female", "hispanic", "black",
-           "kids", "elderly", "education", "married", "FSSTMPVALC_bin"))
-
-FSSTMP.y.train <- as.vector(train.df$FSSTMPVALC_bin)
-FSSTMP.y.test <- as.vector(test.df$FSSTMPVALC_bin)
-
-interaction_df = data.frame(added_interaction=rep(NA, 81), AUC=rep(NA, 81))
-inc = 1
-
-for(i in 1:8){
-  for (j in i:8){
-    col1 = colnames(reduced_train)[i][1]
-    col2 = colnames(reduced_train)[j][1]
-    col_str = paste(col1, col2, sep="_")
-    
-    reduced_train = reduced_train %>% 
-      mutate(interaction_term = (reduced_train[col1] * reduced_train[col2])[,1])
-    reduced_test = reduced_test %>% 
-      mutate(interaction_term = (reduced_test[col1] * reduced_test[col2])[,1])
-    
-    names(reduced_train)[names(reduced_train) == "interaction_term"] = col_str
-    names(reduced_test)[names(reduced_test) == "interaction_term"] = col_str
-  } 
-}
-
-reduced_train_matrix_x <- model.matrix(FSSTMPVALC_bin ~ .
-                               , data=reduced_train)[,-1]
-reduced_test_matrix_x <- model.matrix(FSSTMPVALC_bin ~ .
-                              , data=reduced_test)[,-1]
-
-reduced_train_y <- as.vector(reduced_train$FSSTMPVALC_bin)
-reduced_test_y <- as.vector(reduced_test$FSSTMPVALC_bin)
-
-
-################################################
-# Making Lasso with Interaction/Squared Terms  #
-################################################
-
-lr_lasso_fsstmp_cv_2 <- cv.glmnet(reduced_train_matrix_x, reduced_train_y, 
-                                family=binomial(link="logit"), alpha=1, weights=train.weights)
-
-best_lasso_lambda_fsstmp_2 <- lr_lasso_fsstmp_cv_2$lambda.min
-
-lr_lasso_fsstmp_2 <- glmnet(reduced_train_matrix_x, reduced_train_y, family=binomial(link="logit"), 
-                          alpha=1, lambda = best_lasso_lambda_fsstmp_2, weights=train.weights)
-
-test.df.preds <- test.df.preds %>% mutate(
-  lasso_fsstmp_preds_2 = predict(lr_lasso_fsstmp_2, reduced_test_matrix_x, type="response")[,1]
-)
-
-lasso_fsstmp_rocCurve <- roc(response = as.factor(test.df.preds$FSSTMPVALC_bin),
-                             predictor =test.df.preds$lasso_fsstmp_preds_2,
-                             levels=c("0", "1"))
-
-plot(lasso_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #Better at AUC = .798, (.681, .810)
-
-lasso_fsstmp_pi_star <- coords(lasso_fsstmp_rocCurve, "best", ref="threshold")$threshold[1]
-
-
 ################################
 #   MAKING PREDICTIONS ON ACS  #
 ################################
 
+#Add all squared/interaction terms to ACS data
 
-acs_test_data <- model.matrix(~hhsize + married + education + elderly +
-                            kids + black + hispanic + female, data=acs_data)[,-1]
+acs_reduced_test = acs_data %>% 
+  select(c("hhsize", "female", "hispanic", "black",
+           "kids", "elderly", "education", "married"))
+
+for(i in 1:8){
+  for (j in i:8){
+    col1 = colnames(acs_reduced_test)[i][1]
+    col2 = colnames(acs_reduced_test)[j][1]
+    col_str = paste(col1, col2, sep="_")
+    
+    acs_reduced_test = acs_reduced_test %>% 
+      mutate(interaction_term = (acs_reduced_test[col1] * acs_reduced_test[col2])[,1])
+    
+    names(acs_reduced_test)[names(acs_reduced_test) == "interaction_term"] = col_str
+  } 
+}
+
+acs_test_data <- model.matrix(~., data=acs_reduced_test)[,-1]
 
 fsstmp_predictions <- predict(lr_lasso_fsstmp, acs_test_data, type="response")[,1]
 
@@ -330,10 +304,24 @@ map_data <- sf_data %>%
   left_join(summary_by_PUMA, by = "PUMA")
 
 ggplot(data = map_data) +
+  geom_sf(aes(fill = proportion_on_assistance)) +
+  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
+  theme_minimal() +
+  labs(title = "Proportion of Households with Senior",
+       fill = "Proportion of\nHouseholds with\nSeniors")
+
+ggplot(data = map_data) +
   geom_sf(aes(fill = proportion_has_senior)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
   theme_minimal() +
   labs(title = "Proportion of Households with Senior",
        fill = "Proportion of\nHouseholds with\nSeniors")
+
+ggplot(data = map_data) +
+  geom_sf(aes(fill = total_weights_by_sample)) +
+  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
+  theme_minimal() +
+  labs(title = "Population By PUMA",
+       fill = "PUMA Population")
 
 #Proportion of ACS Senior households

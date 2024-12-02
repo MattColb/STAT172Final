@@ -80,7 +80,7 @@ cps_data <- cps_data %>%
          FSBAL = ifelse(FSBAL %in% c(96,97,98,99), NA, FSBAL),
          FSRAWSCRA = ifelse(FSRAWSCRA %in% c(98,99), NA, FSRAWSCRA),
          FSTOTXPNC = ifelse(FSTOTXPNC %in% c(999), NA, FSTOTXPNC),
-         FSSTMPVALC = ifelse(FSSTMPVALC %in% c(996, 997, 998, 999), NA, FSSTMPVALC)) %>% #The 1000 wasn't in given code, but was always an outlier
+         FSSTMPVALC = ifelse(FSSTMPVALC %in% c(996, 997, 998, 999), 0, FSSTMPVALC)) %>% #The 1000 wasn't in given code, but was always an outlier
   mutate(FSSTATUS = ifelse(FSSTATUS > 1, 1, 0),
          FSSTATUSMD = ifelse(FSSTATUSMD >1, 1, 0),
          FSFOODS = ifelse(FSFOODS > 1, 1, 0),
@@ -88,8 +88,8 @@ cps_data <- cps_data %>%
          FSBAL = ifelse(FSBAL > 1, 1, 0),
          FSRAWSCRA = ifelse(FSRAWSCRA >1, 1, 0),
          FSTOTXPNC_perpers = ifelse(is.na(FSTOTXPNC), NA, FSTOTXPNC_perpers),
-         FSSTMPVALC_bin = ifelse(is.na(FSSTMPVALC), 0, 1),
-         FSSTMPVALC_bin_char = ifelse(is.na(FSSTMPVALC), "No", "Yes")
+         FSSTMPVALC_bin = ifelse(FSSTMPVALC > 0, 1, FSSTMPVALC),
+         FSSTMPVALC_bin_char = ifelse(FSSTMPVALC == 0, "No", "Yes")
   )
 
 cps_data <- cps_data %>% mutate(
@@ -105,8 +105,6 @@ table(cps_data$FSWROUTY, cps_data$FSSTMPVALC_bin)
 table(cps_data$FSFOODS, cps_data$FSSTMPVALC_bin)
 
 table(cps_data$FSFOODS, cps_data$FSWROUTY)
-
-write.csv(cps_data, "./data/interim/cps_data.csv")
 
 #PREDICTIVE VARIABLES
 #hhsize, married, education, elderly, kids, black, hispanic, female, county(?)
