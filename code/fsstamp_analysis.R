@@ -16,12 +16,13 @@ library(randomForest)
 source("./code/clean_cps.R")
 source("./code/clean_acs.R")
 
-include_squared_interaction = TRUE
+include_squared_interaction = FALSE
 
 cps_data <- as.data.frame(cps_data)
 
 cps_data <- cps_data %>% mutate(
-  FSSTMPVALC_bin_fact = as.factor(FSSTMPVALC_bin_char)
+  FSSTMPVALC_bin_fact = as.factor(FSSTMPVALC_bin_char),
+  donut = as.factor(donut)
 )
 
 #(specificity, sensitivity)
@@ -37,6 +38,10 @@ train.df <- cps_data[train.idx,]
 test.df <- cps_data[-train.idx,]
 test.df.preds <- test.df
 
+x_vars = c("hhsize", "female", "hispanic", "black", "faminc_cleaned",
+           "kids", "elderly", "education", "married", "donut")
+y_var = c("FSSTMPVALC_bin")
+
 ###########################
 #   Food Stamp Analysis   #
 ###########################
@@ -46,23 +51,22 @@ test.df.preds <- test.df
 #Combine FSSTMP and WROUTY to see if there are big differences
 #Integrate Phuong's Cluster?
 #RF mtry
+#AUC Graph with all models
 
 ###########################################
 ##  Adding all interaction/squared terms ##
 ###########################################
 
 reduced_train = train.df %>% 
-  select(c("hhsize", "female", "hispanic", "black", "faminc_cleaned",
-           "kids", "elderly", "education", "married", "FSSTMPVALC_bin"))
+  select(c(x_vars, y_var))
 
 reduced_test = test.df %>% 
-  select(c("hhsize", "female", "hispanic", "black", "faminc_cleaned",
-           "kids", "elderly", "education", "married", "FSSTMPVALC_bin"))
+  select(c(x_vars, y_var))
 
 #With or without interactions/squared terms
 if(include_squared_interaction){
-  for(i in 1:9){
-    for (j in i:9){
+  for(i in 1:length(x_vars)){
+    for (j in i:length(x_vars)){
       col1 = colnames(reduced_train)[i][1]
       col2 = colnames(reduced_train)[j][1]
       col_str = paste(col1, col2, sep="_")
@@ -286,12 +290,14 @@ test.df.preds <- test.df.preds %>% mutate(
 #Add all squared/interaction terms to ACS data
 
 acs_reduced_test = acs_data %>% 
-  select(c("hhsize", "female", "hispanic", "black",
-           "kids", "elderly", "education", "married", "faminc_cleaned"))
+  select(x_vars) %>% 
+  mutate(
+    donut = as.factor(donut)
+  )
 
 if(include_squared_interaction){
-  for(i in 1:9){
-    for (j in i:9){
+  for(i in 1:length(x_vars)){
+    for (j in i:length(x_vars)){
       col1 = colnames(acs_reduced_test)[i][1]
       col2 = colnames(acs_reduced_test)[j][1]
       col_str = paste(col1, col2, sep="_")
