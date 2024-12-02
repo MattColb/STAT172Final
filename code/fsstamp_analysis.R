@@ -396,15 +396,11 @@ acs_predicted <- acs_data %>% mutate(
 summary_by_PUMA <- acs_predicted %>% group_by(PUMA = as.factor(PUMA)) %>% 
   summarise(
     sample_size = sum(hhsize),
-    total_weights = sum(weight),
-    total_weights_by_sample = sum(weight *hhsize),
-    people_on_assistance = sum(ifelse(fsstmp_prediction == "On Assistance", 1, 0)),
-    people_on_assistance_weighted = sum(ifelse(fsstmp_prediction == "On Assistance", 1, 0)*weight),
-    proportion_on_assistance = people_on_assistance/sample_size,
+    proportion_on_assistance = weighted.mean(fsstmp_prediction, weight),
     only_senior = sum(ifelse(elderly == hhsize, 1, 0)),
-    proportion_only_senior = only_senior/sample_size,
+    proportion_only_senior = weighted.mean(only_senior, weight),
     has_senior = sum(ifelse(elderly > 0, 1, 0)),
-    proportion_has_senior = has_senior/sample_size
+    proportion_has_senior = weighted.mean(has_senior, weight)
   ) %>% as.data.frame() %>% arrange(desc(proportion_on_assistance))
 
 
