@@ -11,7 +11,7 @@ library(pROC)
 library(RColorBrewer)
 library(randomForest)
 
-cps <- read.csv("./data/cps_00005.csv")
+cps <- read.csv("./data/cps_00006.csv")
 head(cps[,c("CPSID","PERNUM", "FSSTATUS", "FSSTATUSMD", "RACE","EDUC")]) %>% kable
 
 #https://cps.ipums.org/cps-action/variables/search
@@ -21,6 +21,8 @@ summary(cps)
 #map_chr(cps, ~attr(.x, "label")) %>% 
 #  bind_cols(names=names(cps), question = .) %>%
 #  rownames_to_column(var="Variable Name") %>% kable
+
+#Using lower bound estimates for FAMINC
 
 cps <- cps %>% mutate(SEX = SEX-1,
                       CHILD = ifelse(AGE < 18, 1, 0),
@@ -63,8 +65,30 @@ cps_data <- cps %>% group_by(CPSID=as.factor(CPSID)) %>%
     kids = sum(CHILD),
     elderly = sum(ELDERLY),
     education = sum(EDUC),
-    married = sum(MARRIED)
+    married = sum(MARRIED),
+    faminc = first(FAMINC),
+    donut = ifelse(hhsize == (elderly+kids), 1, 0)
   ) %>% ungroup()
+
+cps_data <- cps_data %>% mutate(
+  faminc_cleaned = case_when(faminc == 843 ~ 150000,
+                             faminc == 830 ~ 60000,
+                             faminc == 100 ~ 0,
+                             faminc == 730 ~ 35000,
+                             faminc == 842 ~ 100000,
+                             faminc == 300 ~ 7500,
+                             faminc == 720 ~ 30000,
+                             faminc == 740 ~ 40000,
+                             faminc == 710 ~ 25000,
+                             faminc == 841 ~ 75000,
+                             faminc == 600 ~ 20000,
+                             faminc == 500 ~ 15000,
+                             faminc == 820 ~ 50000,
+                             faminc == 430 ~ 10000,
+                             faminc == 210 ~ 50000,
+                             faminc == 470 ~ 12500,
+                             TRUE ~ NA)
+)
 
 #Non-included variables (Not in ACS):
 #EMPSTAT, DIFFANY, VETSTAT
@@ -80,7 +104,7 @@ cps_data <- cps_data %>%
          FSBAL = ifelse(FSBAL %in% c(96,97,98,99), NA, FSBAL),
          FSRAWSCRA = ifelse(FSRAWSCRA %in% c(98,99), NA, FSRAWSCRA),
          FSTOTXPNC = ifelse(FSTOTXPNC %in% c(999), NA, FSTOTXPNC),
-         FSSTMPVALC = ifelse(FSSTMPVALC %in% c(996, 997, 998, 999), NA, FSSTMPVALC)) %>% #The 1000 wasn't in given code, but was always an outlier
+         FSSTMPVALC = ifelse(FSSTMPVALC %in% c(996, 997, 998, 999), 0, FSSTMPVALC)) %>% #The 1000 wasn't in given code, but was always an outlier
   mutate(FSSTATUS = ifelse(FSSTATUS > 1, 1, 0),
          FSSTATUSMD = ifelse(FSSTATUSMD >1, 1, 0),
          FSFOODS = ifelse(FSFOODS > 1, 1, 0),
@@ -88,8 +112,8 @@ cps_data <- cps_data %>%
          FSBAL = ifelse(FSBAL > 1, 1, 0),
          FSRAWSCRA = ifelse(FSRAWSCRA >1, 1, 0),
          FSTOTXPNC_perpers = ifelse(is.na(FSTOTXPNC), NA, FSTOTXPNC_perpers),
-         FSSTMPVALC_bin = ifelse(is.na(FSSTMPVALC), 0, 1),
-         FSSTMPVALC_bin_char = ifelse(is.na(FSSTMPVALC), "No", "Yes")
+         FSSTMPVALC_bin = ifelse(FSSTMPVALC > 0, 1, FSSTMPVALC),
+         FSSTMPVALC_bin_char = ifelse(FSSTMPVALC == 0, "No", "Yes")
   )
 
 cps_data <- cps_data %>% mutate(
@@ -105,8 +129,6 @@ table(cps_data$FSWROUTY, cps_data$FSSTMPVALC_bin)
 table(cps_data$FSFOODS, cps_data$FSSTMPVALC_bin)
 
 table(cps_data$FSFOODS, cps_data$FSWROUTY)
-
-write.csv(cps_data, "./data/interim/cps_data.csv")
 
 #PREDICTIVE VARIABLES
 #hhsize, married, education, elderly, kids, black, hispanic, female, county(?)
