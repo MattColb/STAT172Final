@@ -71,24 +71,46 @@ cps_data <- cps %>% group_by(CPSID=as.factor(CPSID)) %>%
   ) %>% ungroup()
 
 cps_data <- cps_data %>% mutate(
-  faminc_cleaned = case_when(faminc == 843 ~ 150000,
-                             faminc == 830 ~ 60000,
-                             faminc == 100 ~ 0,
-                             faminc == 730 ~ 35000,
-                             faminc == 842 ~ 100000,
-                             faminc == 300 ~ 7500,
-                             faminc == 720 ~ 30000,
-                             faminc == 740 ~ 40000,
-                             faminc == 710 ~ 25000,
-                             faminc == 841 ~ 75000,
-                             faminc == 600 ~ 20000,
-                             faminc == 500 ~ 15000,
-                             faminc == 820 ~ 50000,
-                             faminc == 430 ~ 10000,
-                             faminc == 210 ~ 50000,
-                             faminc == 470 ~ 12500,
-                             TRUE ~ NA_real_)
+  faminc_cleaned = case_when(
+    faminc == 100 ~ "0-4999",
+    faminc == 210 ~ "5000-7499",
+    faminc == 300 ~ "7500-9999",
+    faminc == 430 ~ "10000-12499",
+    faminc == 470 ~ "12500-14999",
+    faminc == 500 ~ "15000-19999",
+    faminc == 600 ~ "20000-24999",
+    faminc == 710 ~ "25000-29999",
+    faminc == 720 ~ "30000-34999",
+    faminc == 730 ~ "35000-39999",
+    faminc == 740 ~ "40000-49999",
+    faminc == 820 ~ "50000-59999",
+    faminc == 830 ~ "60000-74999",
+    faminc == 841 ~ "75000-99999",
+    faminc == 842 ~ "100000-149999",
+    faminc == 843 ~ "150000+",
+    TRUE ~ NA_character_
+  )
+  
 )
+
+
+#faminc_cleaned = case_when(faminc == 843 ~ 150000,
+#                           faminc == 830 ~ 60000,
+#                           faminc == 100 ~ 0,
+#                           faminc == 730 ~ 35000,
+#                           faminc == 842 ~ 100000,
+#                           faminc == 300 ~ 7500,
+#                           faminc == 720 ~ 30000,
+#                           faminc == 740 ~ 40000,
+#                           faminc == 710 ~ 25000,
+#                           faminc == 841 ~ 75000,
+#                           faminc == 600 ~ 20000,
+#                           faminc == 500 ~ 15000,
+#                           faminc == 820 ~ 50000,
+#                           faminc == 430 ~ 10000,
+#                           faminc == 210 ~ 50000,
+#                           faminc == 470 ~ 12500,
+#                           TRUE ~ NA_real_)
 #100  210  300  430  470  500  600  710  720  730  740  820  830  841  842  843 
 #289   94  193  284  290  495  691  691  825  862 1467 1448 2094 2776 3325 3623 
 table(cps$FAMINC)
