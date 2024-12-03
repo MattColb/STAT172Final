@@ -16,6 +16,8 @@ library(randomForest)
 source("./code/clean_cps.R")
 source("./code/clean_acs.R")
 
+#Predictors are shooting way to high
+
 include_squared_interaction = FALSE
 
 cps_data <- as.data.frame(cps_data)
@@ -38,8 +40,9 @@ train.df <- cps_data[train.idx,]
 test.df <- cps_data[-train.idx,]
 test.df.preds <- test.df
 
-x_vars = c("hhsize", "female", "hispanic", "black", "faminc_cleaned",
-           "kids", "elderly", "education", "married", "donut")
+#Removed donut and faminc_cleaned
+x_vars = c("hhsize", "female", "hispanic", "black",
+           "kids", "elderly", "education", "married")
 y_var = c("FSSTMPVALC_bin")
 
 ###########################
@@ -197,7 +200,7 @@ test.df.preds <- test.df.preds %>% mutate(
 )
 
 ridge_fsstmp_rocCurve <- roc(response = as.factor(test.df.preds$FSSTMPVALC_bin),
-                             predictor =test.df.preds$ridge_fsstmp_preds,
+                             predictor = test.df.preds$ridge_fsstmp_preds,
                              levels=c("0", "1"))
 
 plot(ridge_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #.800 (.684,.810)
@@ -386,22 +389,21 @@ if(include_squared_interaction){
 
 acs_test_data <- model.matrix(~., data=acs_reduced_test)[,-1]
 
-fsstmp_predictions <- predict(lr_lasso_fsstmp, acs_test_data, type="response")[,1]
+fsstmp_predictions <- predict(lr_ridge_fsstmp, acs_test_data, type="response")[,1]
 
 acs_predicted <- acs_data %>% mutate(
-  fsstmp_prediction = ifelse(fsstmp_predictions > lasso_fsstmp_pi_star, "On Assistance", "Not On Assistance")
+  fsstmp_prediction = ifelse(fsstmp_predictions > ridge_fsstmp_pi_star, "On Assistance", "Not On Assistance"),
+  fsstmp_prediction_bin = ifelse(fsstmp_predictions > ridge_fsstmp_pi_star, 1,0)
 )
 
 #How does this adjust with the weights
 summary_by_PUMA <- acs_predicted %>% group_by(PUMA = as.factor(PUMA)) %>% 
   summarise(
     sample_size = sum(hhsize),
-    proportion_on_assistance = weighted.mean(fsstmp_prediction, weight),
+    proportion_on_assistance = weighted.mean(fsstmp_prediction_bin, weight),
     only_senior = sum(ifelse(elderly == hhsize, 1, 0)),
-    proportion_only_senior = weighted.mean(only_senior, weight),
-    has_senior = sum(ifelse(elderly > 0, 1, 0)),
-    proportion_has_senior = weighted.mean(has_senior, weight)
-  ) %>% as.data.frame() %>% arrange(desc(proportion_on_assistance))
+    has_senior = sum(ifelse(elderly > 0, 1, 0))
+) %>% as.data.frame() %>% arrange(desc(proportion_on_assistance))
 
 
 #https://www.geoplatform.gov/metadata/258db7ce-2581-4488-bb5e-e387b6119c7a
@@ -412,6 +414,7 @@ colnames(sf_data)[colnames(sf_data) == "GEOID20"] = "PUMA"
 map_data <- sf_data %>%
   left_join(summary_by_PUMA, by = "PUMA")
 
+#Predictions are way too high
 ggplot(data = map_data) +
   geom_sf(aes(fill = proportion_on_assistance)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
