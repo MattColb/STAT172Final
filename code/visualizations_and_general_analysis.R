@@ -39,24 +39,30 @@ table(cps_data$FSFOODS, cps_data$FSWROUTY, cps_data$FSSTMPVALC_bin)
 #About 216 people experience all 3.
 
 #######################################
-# Visualizing Relationships of FSSTMP #
+#  Visualizing percentage of elderly  #
 #######################################
 
-ggplot(data=cps_data) + 
-  geom_histogram(aes(x=elderly, fill=as.factor(FSSTMPVALC_bin_char)), binwidth=1, position="fill")
+acs_data <-acs_data %>%  mutate(
+  has_senior = as.factor(ifelse(elderly > 0, "Has Elderly", "Doesn't have Elderly")),
+  only_seniors = as.factor(ifelse(elderly == hhsize, "Only Elderly", "No Elderly"))
+)
 
-ggplot(data=cps_data) + 
-  geom_histogram(aes(x=hhsize, fill=as.factor(FSSTMPVALC_bin_char)), binwidth=1, position="fill")
+#Percentage of households with elderly
+mean(acs_data$elderly >0)
+#Percentage of households only elderly
+mean(acs_data$elderly == acs_data$hhsize)
 
-ggplot(data=cps_data) + 
-  geom_histogram(aes(x=married, fill=as.factor(FSSTMPVALC_bin_char)), binwidth=1, position="fill")
+#About 10% of households have elderly people and non-elderly people
 
-#Proportion of food stamps for each elderly person in household
-ggplot(data=cps_data) +
-  geom_histogram(aes(x=elderly, fill=FSSTMPVALC_bin_char), binwidth = 1, position="fill") +
-  scale_fill_brewer(palette="Dark2")
+ggplot(data=acs_data) + 
+  geom_histogram(aes(x=hhsize), binwidth=1)
 
-ggplot(data=cps_data) +
-  geom_histogram(aes(x=married, fill=FSSTMPVALC_bin_char), binwidth=1, position="fill") +
-  scale_fill_brewer(palette="Dark2")
+ggplot(data=acs_data) +
+  geom_histogram(aes(x=hhsize, fill=only_seniors), binwidth=1, position="fill")
+
+ggplot(data=acs_data) +
+  geom_histogram(aes(x=hhsize, fill=has_senior), binwidth=1, position="fill")
+
+
+
 
