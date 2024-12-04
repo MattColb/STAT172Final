@@ -19,8 +19,8 @@ source("./code/clean_acs.R")
 #Predictors are shooting way to high
 
 #Can add or remove including all squared and interaction terms
-#Might cause slight issues with categorical faminc_cleaned.
-include_squared_interaction = TRUE
+#Found that in fsstmp, this didn't improve our model much
+include_squared_interaction = FALSE
 
 cps_data <- as.data.frame(cps_data)
 
@@ -415,9 +415,9 @@ ggplot(data = map_data) +
   geom_sf(aes(fill = proportion_on_assistance)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
   theme_minimal() +
-  labs(title = "Proportion of Households on SNAP/Food Stamps",
+  labs(title = "Proportion of Households with Seniors on SNAP/Food Stamps",
        fill = "Proportion on\nFood Stamps/SNAP")
-
+ggsave("figures/propotion_of_seniors_predicted.png")
 
 #Load in Senior Data
 senior_data <- read.csv("./data/iowa_seniors_by_puma.csv")
@@ -436,11 +436,13 @@ ggplot(data = senior_data) +
   theme_minimal() +
   labs(title = "Total Population of Seniors by PUMA",
        fill = "Population of\nSeniors")
+ggsave("figures/number_of_seniors_by_puma.png")
 
 #Predicted number of seniors on SNAP
 ggplot(data = senior_data) +
   geom_sf(aes(fill = seniors_on_fsstmp)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
   theme_minimal() +
-  labs(title = "Predicted Seniors on SNAP by PUMA",
+  labs(title = "Predicted Number of Seniors on SNAP by PUMA",
        fill = "Predicted number\nof Seniors\non SNAP")
+ggsave("figures/number_on_seniors_fsstmp.png")
