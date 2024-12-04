@@ -304,9 +304,7 @@ acs_predicted <- acs_data %>% mutate(
 )
 head(acs_predicted$fsfoods_prop_preds)
 
-#if only concerned with senior households use this data
-acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
-
+#BASICS WITHOUT SENIORS
 #summary, not using weighted mean
 summary_by_PUMA <- acs_predicted %>% group_by(PUMA = as.factor(PUMA)) %>% 
   summarise(
@@ -324,6 +322,7 @@ colnames(sf_data)[colnames(sf_data) == "GEOID20"] = "PUMA"
 map_data <- sf_data %>%
   left_join(summary_by_PUMA, by = "PUMA")
 
+#proportion of GENERAL households without enough
 ggplot(data = map_data) +
   geom_sf(aes(fill = proportion_on_assistance)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
@@ -331,18 +330,34 @@ ggplot(data = map_data) +
   labs(title = "Proportion of Households without Enough Food",
        fill = "Proportion without\nEnough Food")
 
-ggplot(data = map_data) +
-  geom_sf(aes(fill = proportion_has_senior)) +
-  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
-  theme_minimal() +
-  labs(title = "Proportion of Households with Senior",
-       fill = "Proportion of\nHouseholds with\nSeniors")
+#Load in Senior Data
+acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
 
-ggplot(data = map_data) +
-  geom_sf(aes(fill = total_weights_by_sample)) +
+senior_data <- read.csv("./data/iowa_seniors_by_puma.csv")
+
+senior_data <- senior_data %>% mutate("PUMA" = as.character(GEOID))
+
+senior_data <- map_data %>% left_join(senior_data, by="PUMA")
+
+senior_data <- senior_data %>% mutate(
+  seniors_with_fsfoods = floor(proportion_on_assistance*senior_population)) 
+
+#No predictions, just the SENIORS in each PUMA
+ggplot(data = senior_data) +
+  geom_sf(aes(fill = senior_population)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
   theme_minimal() +
-  labs(title = "Population By PUMA",
-       fill = "PUMA Population")
+  labs(title = "Total Population of Seniors by PUMA",
+       fill = "Population of\nSeniors")
+
+#Predicted number of SENIORS without enough food
+ggplot(data = senior_data) +
+  geom_sf(aes(fill = seniors_with_fsfoods)) +
+  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
+  theme_minimal() +
+  labs(title = "Predicted Seniors w/o Enough Food",
+       fill = "Predicted number\nof Seniors w/o\nEnough Food")
+
+
 
 
