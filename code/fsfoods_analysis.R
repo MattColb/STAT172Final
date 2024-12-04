@@ -287,33 +287,34 @@ ggplot() +
 #let's get the lasso pi star, then.
 lasso_fsfoods_pi_star <- coords(lasso_rocCurve, "best", ref="threshold")$threshold[1]
 
-
 acs_reduced_test = acs_data %>% 
   select(all_of(x_vars)) %>% 
   mutate(
     donut = as.factor(donut)
   )
+
 summary(acs_reduced_test)
 acs_test_data <- model.matrix(~., data=acs_reduced_test)[,-1]
 
-fsfoods_predictions <- predict(fsfoods_lasso_f1, acs_test_data, type="response")[,1]
+fsfoods_prop_preds <- predict(fsfoods_lasso_f1, acs_test_data, type="response")[,1]
 
 acs_predicted <- acs_data %>% mutate(
-  fsfoods_prediction = ifelse(fsfoods_predictions > lasso_fsfoods_pi_star, 1, 0)
+  fsfoods_prediction = ifelse(fsfoods_prop_preds > lasso_fsfoods_pi_star, 1, 0),
+  fsfoods_prop_preds = fsfoods_prop_preds
 )
+head(acs_predicted$fsfoods_prop_preds)
 
+#if only concerned with senior households use this data
+acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
 
-#How does this adjust with the weights
+#summary, not using weighted mean
 summary_by_PUMA <- acs_predicted %>% group_by(PUMA = as.factor(PUMA)) %>% 
   summarise(
     sample_size = sum(hhsize),
-    proportion_on_assistance = weighted.mean(fsfoods_prediction, weight),
+    proportion_on_assistance = mean(fsfoods_prop_preds),
     only_senior = sum(ifelse(elderly == hhsize, 1, 0)),
-    proportion_only_senior = weighted.mean(only_senior, weight),
-    has_senior = sum(ifelse(elderly > 0, 1, 0)),
-    proportion_has_senior = weighted.mean(has_senior, weight)
+    has_senior = sum(ifelse(elderly > 0, 1, 0))
   ) %>% as.data.frame() %>% arrange(desc(proportion_on_assistance))
-
 
 #https://www.geoplatform.gov/metadata/258db7ce-2581-4488-bb5e-e387b6119c7a
 sf_data <- st_read("./data/tl_2023_19_puma20/tl_2023_19_puma20.shp")
@@ -327,7 +328,7 @@ ggplot(data = map_data) +
   geom_sf(aes(fill = proportion_on_assistance)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
   theme_minimal() +
-  labs(title = "Proportion of Households without Enough Food/Kinds of Food",
+  labs(title = "Proportion of Households without Enough Food",
        fill = "Proportion without\nEnough Food")
 
 ggplot(data = map_data) +
@@ -344,5 +345,4 @@ ggplot(data = map_data) +
   labs(title = "Population By PUMA",
        fill = "PUMA Population")
 
-#Proportion of ACS Senior households
 
