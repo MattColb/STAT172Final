@@ -358,8 +358,6 @@ ggplot() +
   labs(x = "1 - Specificity", y = "Sensitivity", color = "Model") +
   theme_minimal()
 
-stop()
-
 ##############################
 ##      ADJUSTING Ridge     ##
 ##############################
@@ -389,7 +387,37 @@ stop()
 
 #So here we will try different adjustments of the pi_star value to 
 #get the optimal _. 
+orig_ridge_fsstmp_pi_star <- coords(ridge_fsstmp_rocCurve, "best", ref="threshold")$threshold[1]
+ridge_fsstmp_pi_star <- ridge_fsstmp_pi_star + .1
+actual = test.df.preds$FSSTMPVALC_bin
+test_values = 10001
+pi_stars <- data.frame(rand_val = runif(test_values), TP=rep(NA, test_values), TN=rep(NA,test_values), 
+           FN=rep(NA, test_values), FP=rep(NA,test_values), pi_star=rep(NA,test_values))
+pi_stars[test_values,] = c(0,NA,NA,NA,NA,NA) #Add row for original pi_star
 
+for (i in 1:test_values){
+  rv <- pi_stars[i, "rand_val"]
+  pi_star <- rv*.5 + orig_ridge_fsstmp_pi_star
+  pi_stars[i, "pi_star"] <- pi_star
+  predicted <- ifelse(test.df.preds$ridge_fsstmp_preds >= pi_star, 1, 0)
+  conf_matrix <- table(predicted, actual)
+  pi_stars[i, "TP"] <- conf_matrix[4]
+  pi_stars[i, "TN"] <- conf_matrix[1]
+  pi_stars[i, "FN"] <- conf_matrix[3]
+  pi_stars[i, "FP"] <- conf_matrix[2]
+}
+
+
+pi_stars <- pi_stars %>% mutate(
+  sensitivity = TP/(TP+FN),
+  specificity = TN/(TN+FP),
+  percent_predicted_actual = TP/(TP+FP)
+)
+
+#Adjust this to decide which pi star to pick
+best_ridge_pi_star <- pi_stars[pi_stars$sensitivity > .5,] %>% 
+  arrange(desc(percent_predicted_actual)) %>% first() %>% 
+  select("pi_star") %>% as.numeric
 
 ################################
 #   MAKING PREDICTIONS ON ACS  #
@@ -420,8 +448,8 @@ acs_test_data <- model.matrix(~., data=acs_reduced_test)[,-1]
 fsstmp_predictions <- predict(lr_ridge_fsstmp, acs_test_data, type="response")[,1]
 
 acs_predicted <- acs_data %>% mutate(
-  fsstmp_prediction = ifelse(fsstmp_predictions > ridge_fsstmp_pi_star, "On Assistance", "Not On Assistance"),
-  fsstmp_prediction_bin = ifelse(fsstmp_predictions > ridge_fsstmp_pi_star, 1,0)
+  fsstmp_prediction = ifelse(fsstmp_predictions > best_ridge_pi_star, "On Assistance", "Not On Assistance"),
+  fsstmp_prediction_bin = ifelse(fsstmp_predictions > best_ridge_pi_star, 1,0)
 )
 
 #How does this adjust with the weights
@@ -442,7 +470,6 @@ colnames(sf_data)[colnames(sf_data) == "GEOID20"] = "PUMA"
 map_data <- sf_data %>%
   left_join(summary_by_PUMA, by = "PUMA")
 
-#Predictions are way too high
 ggplot(data = map_data) +
   geom_sf(aes(fill = proportion_on_assistance)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
@@ -454,11 +481,22 @@ senior_data <- read.csv("./data/iowa_seniors_by_puma.csv")
 
 senior_data <- senior_data %>% mutate("PUMA" = as.character(GEOID))
 
-senior_data <- sf_data %>% left_join(senior_data, by="PUMA")
+senior_data <- map_data %>% left_join(senior_data, by="PUMA")
+
+senior_data <- senior_data %>% mutate(
+  seniors_on_fsstmp = floor(proportion_on_assistance*senior_population)
+) 
 
 ggplot(data = senior_data) +
   geom_sf(aes(fill = senior_population)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
   theme_minimal() +
-  labs(title = "Proportion of Households on SNAP/Food Stamps",
-       fill = "Proportion on\nFood Stamps/SNAP")
+  labs(title = "Total Population of Seniors by PUMA",
+       fill = "Population of\nSeniors")
+
+ggplot(data = senior_data) +
+  geom_sf(aes(fill = seniors_on_fsstmp)) +
+  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
+  theme_minimal() +
+  labs(title = "Predicted Seniors on SNAP by PUMA",
+       fill = "Predicted number\nof Seniors\non SNAP")
