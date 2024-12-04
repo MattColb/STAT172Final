@@ -67,7 +67,7 @@ cps_data <- cps %>% group_by(CPSID=as.factor(CPSID)) %>%
     education = sum(EDUC),
     married = sum(MARRIED),
     faminc = first(FAMINC),
-    donut = ifelse(hhsize == (elderly+kids), 1, 0)
+    donut = as.factor(ifelse(hhsize == (elderly+kids), 1, 0))
   ) %>% ungroup()
 
 cps_data <- cps_data %>% mutate(

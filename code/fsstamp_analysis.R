@@ -23,8 +23,7 @@ include_squared_interaction = FALSE
 cps_data <- as.data.frame(cps_data)
 
 cps_data <- cps_data %>% mutate(
-  FSSTMPVALC_bin_fact = as.factor(FSSTMPVALC_bin_char),
-  donut = as.factor(donut)
+  FSSTMPVALC_bin_fact = as.factor(FSSTMPVALC_bin_char)
 )
 
 #(specificity, sensitivity)
@@ -34,15 +33,14 @@ cps_data <- cps_data %>% mutate(
 ###############################
 
 RNGkind(sample.kind = "default")
-set.seed(159159)
+set.seed(1342141)
 train.idx <- sample(x=1:nrow(cps_data), size=.7*nrow(cps_data))
 train.df <- cps_data[train.idx,]
 test.df <- cps_data[-train.idx,]
 test.df.preds <- test.df
 
-#Removed donut and faminc_cleaned
-x_vars = c("hhsize", "female", "hispanic", "black",
-           "kids", "elderly", "education", "married")
+x_vars = c("hhsize", "female", "hispanic", "black", "faminc_cleaned",
+           "kids", "elderly", "education", "married", "donut")
 y_var = c("FSSTMPVALC_bin")
 
 ###########################
@@ -90,8 +88,8 @@ FSSTMP.x.train <- model.matrix(FSSTMPVALC_bin ~ .
                                , data=reduced_train)[,-1]
 FSSTMP.x.test <- model.matrix(FSSTMPVALC_bin ~ .
                               , data=reduced_test)[,-1]
-FSSTMP.y.train <- as.vector(train.df$FSSTMPVALC_bin)
-FSSTMP.y.test <- as.vector(test.df$FSSTMPVALC_bin)
+FSSTMP.y.train <- as.vector(reduced_train$FSSTMPVALC_bin)
+FSSTMP.y.test <- as.vector(reduced_test$FSSTMPVALC_bin)
 train.weights <- as.vector(train.df$weight)
 test.weights <- as.vector(test.df$weight)
 
@@ -360,6 +358,39 @@ ggplot() +
   labs(x = "1 - Specificity", y = "Sensitivity", color = "Model") +
   theme_minimal()
 
+stop()
+
+##############################
+##      ADJUSTING Ridge     ##
+##############################
+
+#Our Ridge model seemed to perform the best. 
+#The Lasso and firths also performed very similarly with an AUC of around .89.
+#However, the ridge model has a specificity of .802 and sensitivity of .837
+#while the other two have a specificity of around .775 and sensitivity of .863.
+
+#This means that the lasso and firths are able to predict that someone is on
+#food stamps 86.3% of the time when they are actually on food stamps and
+#Predict that they are not on food stamps 77.5% of the time when they actually
+#aren't
+
+#but one thing to note is that
+#the confusion matrix had us predicting nearly four times as many false positives as 
+#true positives.
+#Since we have a lot of cases where people are not on SNAP, and we want to try 
+#and get it more to people who might need it, we should try
+#to increase our specificity, even if it costs us a little sensitivity
+
+#If we are to the point where we can afford being more liberal, using a model 
+#like this would likely be optimal, but we will try to make these adjustments for now.
+
+#We don't need to remake our entire model, but we should try
+#to adjust the specificity while not losing too much sensitivity.
+
+#So here we will try different adjustments of the pi_star value to 
+#get the optimal _. 
+
+
 ################################
 #   MAKING PREDICTIONS ON ACS  #
 ################################
@@ -367,10 +398,7 @@ ggplot() +
 #Add all squared/interaction terms to ACS data
 
 acs_reduced_test = acs_data %>% 
-  select(x_vars) %>% 
-  mutate(
-    donut = as.factor(donut)
-  )
+  select(x_vars) 
 
 if(include_squared_interaction){
   for(i in 1:length(x_vars)){
@@ -422,18 +450,15 @@ ggplot(data = map_data) +
   labs(title = "Proportion of Households on SNAP/Food Stamps",
        fill = "Proportion on\nFood Stamps/SNAP")
 
-ggplot(data = map_data) +
-  geom_sf(aes(fill = proportion_has_senior)) +
+senior_data <- read.csv("./data/iowa_seniors_by_puma.csv")
+
+senior_data <- senior_data %>% mutate("PUMA" = as.character(GEOID))
+
+senior_data <- sf_data %>% left_join(senior_data, by="PUMA")
+
+ggplot(data = senior_data) +
+  geom_sf(aes(fill = senior_population)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
   theme_minimal() +
-  labs(title = "Proportion of Households with Senior",
-       fill = "Proportion of\nHouseholds with\nSeniors")
-
-ggplot(data = map_data) +
-  geom_sf(aes(fill = total_weights_by_sample)) +
-  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
-  theme_minimal() +
-  labs(title = "Population By PUMA",
-       fill = "PUMA Population")
-
-#Proportion of ACS Senior households
+  labs(title = "Proportion of Households on SNAP/Food Stamps",
+       fill = "Proportion on\nFood Stamps/SNAP")
