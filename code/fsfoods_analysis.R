@@ -17,29 +17,25 @@ library(rpart.plot)
 library(ggplot2)
 
 source("./code/clean_cps.R")
-#source("./code/clean_acs.R") shouldn't I only have the cps source?
+source("./code/clean_acs.R") 
 
 #Cleaning and Exploring
-summary(cps_data)
-str(cps_data)
-head(cps_data)
-#is there a point to making this a character and then a factor? 
-##YES because random forest won't work on numeric, it works on factors
-##because then it sees it as a classification, not regression, problem.
-
-#there's a bunch of nulls in here and it's generally binary, currently num type
-#just going to drop the na's and take note of how many obs I 
-#had and how many are left
+#summary(cps_data)
+#str(cps_data)
+#head(cps_data)
+#FSFOODS indicates whether the household had enough to eat or enough of the kinds of foods they wanted to eat in the past twelve months.
+#FSFOODS is 1 if Not Enough, 0 if Enough
 
 ##TASKS
 #try regressions both with and without some meaningful interaction
-#terms to look at the ways your X's could affect eachother and the outcome
-
-summary(cps_data$FSFOODS) #FSFOODS has 1755 NA's
+#terms to look at the ways your X's could affect each other and the outcome
+cps_data <- cps_data %>% mutate(
+  donut = as.factor(donut)
+)
+#summary(cps_data$FSFOODS) FSFOODS has 1755 NA's
 cps_data_f <- cps_data[!is.na(cps_data$FSFOODS),]
-summary(cps_data_f$FSFOODS) #new subset without NAs has 6665 obs, compared to 8420 originally
-summary(cps_data_f)
-
+#summary(cps_data_f$FSFOODS) new subset without NAs has 6665 obs, compared to 8420 originally
+#str(cps_data_f)
 
 #Split the data into train/test df forms to use in lasso/ridge later
 RNGkind(sample.kind = "default")
@@ -54,10 +50,10 @@ y_var = c("FSFOODS")
 
 ## Make all necessary matrices and vectors
 fsfoods.x.train <- model.matrix(FSFOODS~hhsize + married + education + elderly +
-                                  kids + black + hispanic + female+ faminc_cleaned,
+                                  kids + black + hispanic + female+ faminc_cleaned + donut,
                                 data = train.df)[,-1] 
 fsfoods.x.test <- model.matrix(FSFOODS~hhsize + married + education + elderly +
-                                 kids + black + hispanic + female+ faminc_cleaned,
+                                 kids + black + hispanic + female+ faminc_cleaned + donut,
                                data = test.df)[,-1]
 fsfoods.y.train <- train.df$FSFOODS %>% as.vector()
 fsfoods.y.test <- test.df$FSFOODS %>% as.vector()
@@ -67,7 +63,7 @@ test.weights <- as.vector(test.df$weight) #not strictly necessary, for ease of r
 #----MLE Logistic Regression----
 
 lr_mle_fsfoods <- glm(FSFOODS ~ hhsize + married + education + elderly +
-                       kids + black + hispanic + female + faminc_cleaned,
+                       kids + black + hispanic + female + faminc_cleaned + donut,
                      data=train.df,
                      family=binomial(link="logit"),
                      weights=weight
@@ -81,7 +77,7 @@ lr_mle_fsfoods_beta <- lr_mle_fsfoods %>% coef()
 
 #---Firth's Penalized Likelihood----
 lr_fmle_fsfoods <- logistf(FSFOODS ~ hhsize + married + education + elderly +
-                             kids + black + hispanic + female + faminc_cleaned,
+                             kids + black + hispanic + female + faminc_cleaned + donut,
                            data=train.df,
                            weights=train.weights)
 
@@ -121,6 +117,7 @@ fsfoods_lasso_f1 <- glmnet(fsfoods.x.train, fsfoods.y.train,
 fsfoods_ridge_f1 <- glmnet(fsfoods.x.train, fsfoods.y.train, 
                       family = binomial(link = "logit"), alpha = 0,
                       lambda = best_ridge_lambda) #this lambda is what actually tunes the model
+
 #----Random Forest----
 
 rf_train <- train.df %>% select(-c("FSFOODS")) %>% 
@@ -134,7 +131,7 @@ rf_test <- test.df %>% select(-c("FSFOODS")) %>%
   )
 
 rf_init_fsfoods <- randomForest(FSFOODS_fact ~ hhsize + married + education + elderly +
-                                  kids + black + hispanic + female + faminc_cleaned,
+                                  kids + black + hispanic + female + faminc_cleaned + donut,
                                data=rf_train,
                                mtry=floor(sqrt(length(x_vars))),
                                ntree=1000,
@@ -148,7 +145,7 @@ keeps <- data.frame(m=rep(NA, length(mtry)),
 for (idx in 1:length(mtry)){
   print(paste0("Trying m = ", mtry[idx]))
   tempforest <- randomForest(FSFOODS_fact ~hhsize + married + education + elderly +
-                               kids + black + hispanic + female + faminc_cleaned,
+                               kids + black + hispanic + female + faminc_cleaned + donut,
                              data=rf_train,
                              ntree=1000,
                              mtry=mtry[idx])
@@ -159,15 +156,15 @@ for (idx in 1:length(mtry)){
 best_m <- keeps[order(keeps$OOB_err_rate),"m"][1]
 
 final_forest <- randomForest(FSFOODS_fact ~ hhsize + married + education + elderly +
-                               kids + black + hispanic + female + faminc_cleaned,
+                               kids + black + hispanic + female + faminc_cleaned + donut,
                              data=rf_train,
                              mtry=best_m,
                              ntree=1000,
                              importance=TRUE)
 
-plot(rf_rocCurve, print.thres=TRUE, print.auc=TRUE)
+#plot(rf_rocCurve, print.thres=TRUE, print.auc=TRUE)
 
-rf_pi_star <- coords(rf_rocCurve, "best", ret="threshold")$threshold[1]
+#rf_pi_star <- coords(rf_rocCurve, "best", ret="threshold")$threshold[1]
 #pi star is 0.0055 idk what that means but im saving it just in case ig
 
 #making a variable importance plot based on decrease in forest accuracy
@@ -180,7 +177,7 @@ rf_vi <- rf_vi %>% arrange(desc(MeanDecreaseAccuracy))
 #Create big tree, then prune
 set.seed(578493768)
 ctree <- rpart(FSFOODS ~ hhsize + married + education + elderly +
-                 kids + black + hispanic + female+ faminc_cleaned,
+                 kids + black + hispanic + female+ faminc_cleaned + donut,
                data = train.df, #training data, NOT original data
                method = "class",
                control = rpart.control(cp = 0.0001, minsplit = 1))
@@ -282,11 +279,70 @@ ggplot() +
   theme_minimal()
 
 #Then, compare performance on the ACS data THIS NEEDS TO BE CHANGED TO REF THE ACTUAL ACS
-test.df.acspreds <- test.df %>% 
+#While we don't need to do a split, as all the ACS data is a "test" split
+#we still need to create matrices so that we can use lasso and ridge on this data
+
+#Split the data into train/test df forms to use in lasso: this is our best model
+#with an AUS of 0.726
+#let's get the lasso pi star, then.
+lasso_fsfoods_pi_star <- coords(lasso_rocCurve, "best", ref="threshold")$threshold[1]
+
+
+acs_reduced_test = acs_data %>% 
+  select(all_of(x_vars)) %>% 
   mutate(
-    mle_pred = predict(lr_mle_fsfoods, test.df, type = "response"),
-    #note: lasso and ridge get the MATRIX x.test 
-    lasso_pred = predict(fsfoods_lasso_f1, fsfoods.x.test, type = "response")[,1],
-    ridge_pred = predict(fsfoods_ridge_f1, fsfoods.x.test, type = "response")[,1]
-    #note: ALL NEED type = "response" so we don't get log-odds in our result
+    donut = as.factor(donut)
   )
+summary(acs_reduced_test)
+acs_test_data <- model.matrix(~., data=acs_reduced_test)[,-1]
+
+fsfoods_predictions <- predict(fsfoods_lasso_f1, acs_test_data, type="response")[,1]
+
+acs_predicted <- acs_data %>% mutate(
+  fsfoods_prediction = ifelse(fsfoods_predictions > lasso_fsfoods_pi_star, 1, 0)
+)
+
+
+#How does this adjust with the weights
+summary_by_PUMA <- acs_predicted %>% group_by(PUMA = as.factor(PUMA)) %>% 
+  summarise(
+    sample_size = sum(hhsize),
+    proportion_on_assistance = weighted.mean(fsfoods_prediction, weight),
+    only_senior = sum(ifelse(elderly == hhsize, 1, 0)),
+    proportion_only_senior = weighted.mean(only_senior, weight),
+    has_senior = sum(ifelse(elderly > 0, 1, 0)),
+    proportion_has_senior = weighted.mean(has_senior, weight)
+  ) %>% as.data.frame() %>% arrange(desc(proportion_on_assistance))
+
+
+#https://www.geoplatform.gov/metadata/258db7ce-2581-4488-bb5e-e387b6119c7a
+sf_data <- st_read("./data/tl_2023_19_puma20/tl_2023_19_puma20.shp")
+
+colnames(sf_data)[colnames(sf_data) == "GEOID20"] = "PUMA"
+
+map_data <- sf_data %>%
+  left_join(summary_by_PUMA, by = "PUMA")
+
+ggplot(data = map_data) +
+  geom_sf(aes(fill = proportion_on_assistance)) +
+  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
+  theme_minimal() +
+  labs(title = "Proportion of Households without Enough Food/Kinds of Food",
+       fill = "Proportion without\nEnough Food")
+
+ggplot(data = map_data) +
+  geom_sf(aes(fill = proportion_has_senior)) +
+  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
+  theme_minimal() +
+  labs(title = "Proportion of Households with Senior",
+       fill = "Proportion of\nHouseholds with\nSeniors")
+
+ggplot(data = map_data) +
+  geom_sf(aes(fill = total_weights_by_sample)) +
+  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
+  theme_minimal() +
+  labs(title = "Population By PUMA",
+       fill = "PUMA Population")
+
+#Proportion of ACS Senior households
+
