@@ -18,7 +18,9 @@ source("./code/clean_acs.R")
 
 #Predictors are shooting way to high
 
-include_squared_interaction = FALSE
+#Can add or remove including all squared and interaction terms
+#Might cause slight issues with categorical faminc_cleaned.
+include_squared_interaction = TRUE
 
 cps_data <- as.data.frame(cps_data)
 
@@ -50,7 +52,6 @@ y_var = c("FSSTMPVALC_bin")
 #Create more visualizations
 #Choose a model to use
 #Combine FSSTMP and WROUTY to see if there are big differences
-#Add weighted means
 
 ###########################################
 ##  Adding all interaction/squared terms ##
@@ -69,14 +70,16 @@ if(include_squared_interaction){
       col1 = colnames(reduced_train)[i][1]
       col2 = colnames(reduced_train)[j][1]
       col_str = paste(col1, col2, sep="_")
-      
-      reduced_train = reduced_train %>% 
-        mutate(interaction_term = (reduced_train[col1] * reduced_train[col2])[,1])
-      reduced_test = reduced_test %>% 
-        mutate(interaction_term = (reduced_test[col1] * reduced_test[col2])[,1])
-      
-      names(reduced_train)[names(reduced_train) == "interaction_term"] = col_str
-      names(reduced_test)[names(reduced_test) == "interaction_term"] = col_str
+      if((sapply(reduced_train[col2], class) %in% c("integer", "numeric")) & 
+         (sapply(reduced_train[col1], class) %in% c("integer", "numeric"))){
+        reduced_train = reduced_train %>% 
+          mutate(interaction_term = (reduced_train[col1] * reduced_train[col2])[,1])
+        reduced_test = reduced_test %>% 
+          mutate(interaction_term = (reduced_test[col1] * reduced_test[col2])[,1])
+        
+        names(reduced_train)[names(reduced_train) == "interaction_term"] = col_str
+        names(reduced_test)[names(reduced_test) == "interaction_term"] = col_str
+      }
     } 
   }
 }
@@ -299,11 +302,6 @@ test.df.preds <- test.df.preds %>% mutate(
   ctree_fsstmp_preds = as.factor(ifelse(pi_hat > ctree_fsstmp_pi_star, "Yes", "No"))
 )
 
-###################################
-# PREDICTING FSWROUTY AND FSSTMP  #
-###################################
-
-
 #######################
 ## COMPARE ALL AUCS ##
 ######################
@@ -358,76 +356,14 @@ ggplot() +
   labs(x = "1 - Specificity", y = "Sensitivity", color = "Model") +
   theme_minimal()
 
-##############################
-##      ADJUSTING Ridge     ##
-##############################
-
-#Our Ridge model seemed to perform the best. 
-#The Lasso and firths also performed very similarly with an AUC of around .89.
-#However, the ridge model has a specificity of .802 and sensitivity of .837
-#while the other two have a specificity of around .775 and sensitivity of .863.
-
-#This means that the lasso and firths are able to predict that someone is on
-#food stamps 86.3% of the time when they are actually on food stamps and
-#Predict that they are not on food stamps 77.5% of the time when they actually
-#aren't
-
-#but one thing to note is that
-#the confusion matrix had us predicting nearly four times as many false positives as 
-#true positives.
-#Since we have a lot of cases where people are not on SNAP, and we want to try 
-#and get it more to people who might need it, we should try
-#to increase our specificity, even if it costs us a little sensitivity
-
-#If we are to the point where we can afford being more liberal, using a model 
-#like this would likely be optimal, but we will try to make these adjustments for now.
-
-#We don't need to remake our entire model, but we should try
-#to adjust the specificity while not losing too much sensitivity.
-
-#So here we will try different adjustments of the pi_star value to 
-#get the optimal _. 
-orig_ridge_fsstmp_pi_star <- coords(ridge_fsstmp_rocCurve, "best", ref="threshold")$threshold[1]
-ridge_fsstmp_pi_star <- ridge_fsstmp_pi_star + .1
-actual = test.df.preds$FSSTMPVALC_bin
-test_values = 10001
-pi_stars <- data.frame(rand_val = runif(test_values), TP=rep(NA, test_values), TN=rep(NA,test_values), 
-           FN=rep(NA, test_values), FP=rep(NA,test_values), pi_star=rep(NA,test_values))
-pi_stars[test_values,] = c(0,NA,NA,NA,NA,NA) #Add row for original pi_star
-
-for (i in 1:test_values){
-  rv <- pi_stars[i, "rand_val"]
-  pi_star <- rv*.5 + orig_ridge_fsstmp_pi_star
-  pi_stars[i, "pi_star"] <- pi_star
-  predicted <- ifelse(test.df.preds$ridge_fsstmp_preds >= pi_star, 1, 0)
-  conf_matrix <- table(predicted, actual)
-  pi_stars[i, "TP"] <- conf_matrix[4]
-  pi_stars[i, "TN"] <- conf_matrix[1]
-  pi_stars[i, "FN"] <- conf_matrix[3]
-  pi_stars[i, "FP"] <- conf_matrix[2]
-}
-
-
-pi_stars <- pi_stars %>% mutate(
-  sensitivity = TP/(TP+FN),
-  specificity = TN/(TN+FP),
-  percent_predicted_actual = TP/(TP+FP)
-)
-
-#Adjust this to decide which pi star to pick
-best_ridge_pi_star <- pi_stars[pi_stars$sensitivity > .5,] %>% 
-  arrange(desc(percent_predicted_actual)) %>% first() %>% 
-  select("pi_star") %>% as.numeric
-
-################################
-#   MAKING PREDICTIONS ON ACS  #
-################################
-
-#Add all squared/interaction terms to ACS data
+################
+# LOAD IN ACS  #
+################
 
 acs_reduced_test = acs_data %>% 
   select(x_vars) 
 
+#Add all squared/interaction terms to ACS data
 if(include_squared_interaction){
   for(i in 1:length(x_vars)){
     for (j in i:length(x_vars)){
@@ -445,22 +381,26 @@ if(include_squared_interaction){
 
 acs_test_data <- model.matrix(~., data=acs_reduced_test)[,-1]
 
+##################################
+## MAKE PREDICTIONS ON ACS DATA ##
+##################################
+
 fsstmp_predictions <- predict(lr_ridge_fsstmp, acs_test_data, type="response")[,1]
 
 acs_predicted <- acs_data %>% mutate(
-  fsstmp_prediction = ifelse(fsstmp_predictions > best_ridge_pi_star, "On Assistance", "Not On Assistance"),
-  fsstmp_prediction_bin = ifelse(fsstmp_predictions > best_ridge_pi_star, 1,0)
+  fsstmp_probabilities = fsstmp_predictions
 )
 
+acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
+
 #How does this adjust with the weights
-summary_by_PUMA <- acs_predicted %>% group_by(PUMA = as.factor(PUMA)) %>% 
+summary_by_PUMA <- acs_predicted_only_seniors %>% group_by(PUMA = as.factor(PUMA)) %>% 
   summarise(
     sample_size = sum(hhsize),
-    proportion_on_assistance = weighted.mean(fsstmp_prediction_bin, weight),
+    proportion_on_assistance = weighted.mean(fsstmp_probabilities, weight),
     only_senior = sum(ifelse(elderly == hhsize, 1, 0)),
     has_senior = sum(ifelse(elderly > 0, 1, 0))
-) %>% as.data.frame() %>% arrange(desc(proportion_on_assistance))
-
+  ) %>% as.data.frame() %>% arrange(desc(proportion_on_assistance))
 
 #https://www.geoplatform.gov/metadata/258db7ce-2581-4488-bb5e-e387b6119c7a
 sf_data <- st_read("./data/tl_2023_19_puma20/tl_2023_19_puma20.shp")
@@ -470,6 +410,7 @@ colnames(sf_data)[colnames(sf_data) == "GEOID20"] = "PUMA"
 map_data <- sf_data %>%
   left_join(summary_by_PUMA, by = "PUMA")
 
+#Proportion of seniors that are on SNAP/Food Stamps
 ggplot(data = map_data) +
   geom_sf(aes(fill = proportion_on_assistance)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
@@ -477,6 +418,8 @@ ggplot(data = map_data) +
   labs(title = "Proportion of Households on SNAP/Food Stamps",
        fill = "Proportion on\nFood Stamps/SNAP")
 
+
+#Load in Senior Data
 senior_data <- read.csv("./data/iowa_seniors_by_puma.csv")
 
 senior_data <- senior_data %>% mutate("PUMA" = as.character(GEOID))
@@ -494,6 +437,7 @@ ggplot(data = senior_data) +
   labs(title = "Total Population of Seniors by PUMA",
        fill = "Population of\nSeniors")
 
+#Predicted number of seniors on SNAP
 ggplot(data = senior_data) +
   geom_sf(aes(fill = seniors_on_fsstmp)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
