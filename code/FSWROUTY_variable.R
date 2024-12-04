@@ -17,6 +17,8 @@ library(logistf)
 
 source("code/clean_cps.R")
 
+############ Clean Y-Variable ############
+
 # change y-variable into factor
 cps_data$FSWROUTY_binchar <- ifelse(cps_data$FSWROUTY == 0, "No", "Yes")
 
@@ -25,8 +27,7 @@ cps_data <- cps_data[!is.na(cps_data$FSWROUTY_binchar),]
 
 # cps_data <- cps_data %>% mutate(FSWROUTY_bin = as.factor(FSWROUTY_binchar))
 
-cps_data <- cps_data %>% mutate(FSWROUTY_bin = ifelse(FSWROUTY_binchar == "No", 0, 1),
-                                FSWROUTY_binchar = as.factor(FSWROUTY_binchar))
+cps_data <- cps_data %>% mutate(FSWROUTY_bin = ifelse(FSWROUTY_binchar == "No", 0, 1))
 
 summary(cps_data)
 head(cps_data)
@@ -69,16 +70,12 @@ ggplot(data = data_X_long) +
 #           => big family size with children and elderly  
 # Cluster 5: Outliers or Minimal Engagement
 
-
 ############ Train Test Split ############
 
-# Add cluster membership back to the main dataset
-cps_data$h_cluster <- as.factor(cutree(data_clust, k = 5))
-
 # Combine cluster memberships with other features
-model_data <- cps_data[, c("FSWROUTY_bin","FSWROUTY_binchar", "weight", "hhsize", "female", 
-                           "hispanic", "black", "kids", "elderly", "education",
-                           "married", "faminc_cleaned")]
+model_data <- cps_data[, c("FSWROUTY_bin", "weight", "hhsize",  
+                           "female", "hispanic", "black", "kids", "elderly",
+                           "education", "married", "faminc_cleaned")]
 
 # splitting training and testing
 RNGkind(sample.kind = "default")
@@ -86,6 +83,32 @@ set.seed(159159)
 train.idx <- sample(x=1:nrow(model_data), size=.7*nrow(model_data))
 train.df <- model_data[train.idx,]
 test.df <- model_data[-train.idx,]
+
+######## Adding Interactions/Squared Terms #########
+
+x_vars = c("hhsize", "female", "hispanic", "black", "kids", "elderly",
+           "education", "married", "faminc_cleaned")
+y_var = c("FSWROUTY_bin")
+
+include_squared_interaction = FALSE
+#With or without interactions/squared terms
+if(include_squared_interaction){
+  for(i in 1:length(x_vars)){
+    for (j in i:length(x_vars)){
+      col1 <- colnames(train.df)[i][1]
+      col2 <- colnames(train.df)[j][1]
+      col_str <- paste(col1, col2, sep="_")
+      
+      reduced_train = train.df %>% 
+        mutate(interaction_term = (train.df[col1] * train.df[col2])[,1])
+      reduced_test = test.df %>% 
+        mutate(interaction_term = (reduced_test[col1] * reduced_test[col2])[,1])
+      
+      names(reduced_train)[names(reduced_train) == "interaction_term"] = col_str
+      names(reduced_test)[names(reduced_test) == "interaction_term"] = col_str
+    } 
+  }
+}
 
 ################ MLE #########################
 
@@ -138,27 +161,101 @@ firth_fswrouty_pi_hat <- coords(firths_fswrouty_rocCurve, "best", ref="threshold
 
 ############# RANDOM FOREST ###################
 
-rf_fswrouty <- randomForest(FSWROUTY_binchar ~ hhsize + married + faminc_cleaned +
-                              education + elderly + kids + black + hispanic + female ,
+
+rf_fswrouty_temp <- randomForest(as.factor(FSWROUTY_bin) ~ .,
                            data = train.df,
                            ntree = 1000,
-                           mtry = 3,
+                           mtry = floor(sqrt(length(x_vars))),
                            importance = TRUE)
 
-importance(rf_fswrouty)
-varImpPlot(rf_fswrouty)
+#Multiple mtry
+mtry = c(1:length(x_vars))
+keeps <- data.frame(m=rep(NA, length(mtry)),
+                    OOB_err_rate = rep(NA, length(mtry)))
+
+for (idx in 1:length(mtry)){
+  print(paste0("Trying m = ", mtry[idx]))
+  tempforest <- randomForest(as.factor(FSWROUTY_bin) ~.,
+                             data= train.df,
+                             ntree=1000,
+                             mtry=mtry[idx])
+  keeps[idx, "m"] <- mtry[idx]
+  keeps[idx, "OOB_err_rate"] <- mean(predict(tempforest) != train.df$FSWROUTY_bin) #Estimates out of sample error
+}
+
+best_m <- keeps[order(keeps$OOB_err_rate),"m"][1]
+
+ggplot(keeps, aes(x = m, y = OOB_err_rate)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "OOB Error Rate vs mtry",
+       x = "mtry",
+       y = "OOB Error Rate") +
+  theme_minimal()
+
+# final RF model
+rf_fswrouty <- randomForest(as.factor(FSWROUTY_bin) ~ .,
+                                 data = train.df,
+                                 ntree = 1000,
+                                 mtry = best_m,
+                                 importance = TRUE)
 
 # Validate model as predictive tool
 
-pi_hat <- predict(rf_fswrouty, test.df, type = "prob")[, "Yes"] #Choose positive event column
+pi_hat <- predict(rf_fswrouty, test.df, type = "prob")[, "1"] #Choose positive event column
 
-rf_rocCurve <- roc(response = test.df$FSWROUTY_binchar,
+rf_rocCurve <- roc(response = test.df$FSWROUTY_bin,
                 predictor = pi_hat,
-                levels = c("No", "Yes"))
+                levels = c("0", "1"))
 
 plot(rf_rocCurve, print.thres = TRUE, print.ouc = TRUE)
 
 auc(rf_rocCurve) 
+
+pi_star <- coords(rf_rocCurve, "best", ret="threshold")$threshold[1]
+
+test_preds <- test.df %>% mutate(
+  rf_preds = as.factor(ifelse(pi_hat > pi_star, "Yes", "No"))
+)
+
+varImpPlot(rf_fswrouty, type=1)
+
+rf_vi <- as.data.frame(varImpPlot(rf_fswrouty, type=1))
+
+rf_vi$Variable <- rownames(rf_vi)
+
+rf_vi <- rf_vi %>% arrange(desc(MeanDecreaseAccuracy))
+
+################ Tree #####################
+library(rpart)
+library(rpart.plot)
+
+ctree <- rpart(FSWROUTY_bin ~ hhsize + married + education + elderly +
+                 kids + black + hispanic + female + faminc_cleaned,
+               data= train.df,
+               weights = weight,
+               method="class",
+               control=rpart.control(cp=.0001, minsplit=1))
+
+optimalcp <- ctree$cptable[which.min(ctree$cptable[,"xerror"]), "CP"]
+
+ctree_optimal <- prune(ctree, cp=optimalcp)
+
+rpart.plot(ctree_optimal)
+
+pi_hat <- predict(ctree_optimal, test.df, type="prob")[,"1"]
+
+ctree_rocCurve <- roc(response=test.df$FSWROUTY_bin,
+                      predictor=pi_hat,
+                      levels=c("0", "1"))
+
+plot(ctree_rocCurve, print.thres=TRUE, print.auc=TRUE)
+
+ctree_pi_star <- coords(rf_rocCurve, "best", ret="threshold")$threshold[1]
+
+test_preds <- test_preds %>% mutate(
+  ctree_preds = as.factor(ifelse(pi_hat > ctree_pi_star, "Yes", "No"))
+)
 
 ###########################################
 
@@ -254,17 +351,32 @@ ridge_data_fswrouty <- data.frame(
   Sensitivity = ridge_rocCurve$sensitivities,
   AUC = ridge_rocCurve$auc%>% as.numeric
 )
+# make data frame of ctree ROC info
+ctree_fswrouty <- data.frame(
+  Model = "Categorical Tree",
+  Specificity = ctree_rocCurve$specificities,
+  Sensitivity = ctree_rocCurve$sensitivities,
+  AUC = ctree_rocCurve$auc %>% as.numeric
+)
+
+rf_fswrouty <- data.frame(
+  Model = "Random Forest",
+  Specificity = rf_rocCurve$specificities,
+  Sensitivity = rf_rocCurve$sensitivities,
+  AUC = rf_rocCurve$auc %>% as.numeric
+)
 
 # Combine all the data frames
-roc_data <- rbind(mle_data_fswrouty, firths_data_fswrouty, lasso_data_fswrouty, ridge_data_fswrouty)
+roc_data <- rbind(firths_data_fswrouty, lasso_data_fswrouty, 
+                  ridge_data_fswrouty, rf_fswrouty, ctree_fswrouty)
 
 
 # Plot the data
 ggplot() +
   geom_line(aes(x = 1 - Specificity, y = Sensitivity, color = Model),data = roc_data) +
   geom_text(data = roc_data %>% group_by(Model) %>% slice(1), 
-            aes(x = 0.75, y = c(0.75, 0.65, 0.55, 0.45), colour = Model,
-                label = paste0(Model, " AUC = ", round(AUC, 4)))) +
+            aes(x = 0.75, y = c(0.75, 0.65, 0.55, 0.45, 0.35), colour = Model,
+                label = paste0(Model, " AUC = ", round(AUC, 5)))) +
   scale_colour_brewer(palette = "Paired") +
   labs(x = "1 - Specificity", y = "Sensitivity", color = "Model") +
   theme_minimal()
