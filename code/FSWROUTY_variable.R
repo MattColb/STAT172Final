@@ -36,7 +36,7 @@ head(cps_data)
 
 # set up
 data_X <- cps_data[, c( "hhsize", "female", "hispanic", "black", 
-                       "kids", "elderly", "education", "married", "faminc_cleaned")]
+                       "kids", "elderly", "education", "married")]
 
 # standardize all predictor columns 
 data_stand <- apply(data_X, 2, function(x)(x - mean(x))/sd(x))
@@ -84,31 +84,10 @@ train.idx <- sample(x=1:nrow(model_data), size=.7*nrow(model_data))
 train.df <- model_data[train.idx,]
 test.df <- model_data[-train.idx,]
 
-######## Adding Interactions/Squared Terms #########
+#################
 
 x_vars = c("hhsize", "female", "hispanic", "black", "kids", "elderly",
            "education", "married", "faminc_cleaned")
-y_var = c("FSWROUTY_bin")
-
-include_squared_interaction = FALSE
-#With or without interactions/squared terms
-if(include_squared_interaction){
-  for(i in 1:length(x_vars)){
-    for (j in i:length(x_vars)){
-      col1 <- colnames(train.df)[i][1]
-      col2 <- colnames(train.df)[j][1]
-      col_str <- paste(col1, col2, sep="_")
-      
-      reduced_train = train.df %>% 
-        mutate(interaction_term = (train.df[col1] * train.df[col2])[,1])
-      reduced_test = test.df %>% 
-        mutate(interaction_term = (reduced_test[col1] * reduced_test[col2])[,1])
-      
-      names(reduced_train)[names(reduced_train) == "interaction_term"] = col_str
-      names(reduced_test)[names(reduced_test) == "interaction_term"] = col_str
-    } 
-  }
-}
 
 ################ MLE #########################
 
@@ -381,7 +360,68 @@ ggplot() +
   labs(x = "1 - Specificity", y = "Sensitivity", color = "Model") +
   theme_minimal()
 
+source("./code/clean_acs.R")
+acs_reduced_test = acs_data %>% 
+   select(x_vars) 
+ 
+acs_test_data <- model.matrix(~., data=acs_reduced_test)[,-1]
+fswrouty_predictions <- predict(lasso_model, acs_test_data, type="response")[,1]
+# Check the first few predictions
+head(fswrouty_predictions)
 
+acs_predicted <- acs_data %>% mutate(
+    fswrouty_probs = fswrouty_predictions
+)
+
+acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
+
+ #How does this adjust with the weights
+summary_by_PUMA <- acs_predicted_only_seniors %>% group_by(PUMA = as.factor(PUMA)) %>% 
+   summarise(
+     sample_size = sum(hhsize),
+     proportion_on_assistance = weighted.mean(fswrouty_probs, weight),
+     only_senior = sum(ifelse(elderly == hhsize, 1, 0)),
+     has_senior = sum(ifelse(elderly > 0, 1, 0))
+   ) %>% as.data.frame() %>% arrange(desc(proportion_on_assistance))
+#https://www.geoplatform.gov/metadata/258db7ce-2581-4488-bb5e-e387b6119c7a
+sf_data <- st_read("./data/tl_2023_19_puma20/tl_2023_19_puma20.shp")
+
+colnames(sf_data)[colnames(sf_data) == "GEOID20"] = "PUMA"
+ 
+map_data <- sf_data %>%
+ left_join(summary_by_PUMA, by = "PUMA")
+ 
+#Proportion of seniors that are on SNAP/Food Stamps
+ggplot(data = map_data) +
+   geom_sf(aes(fill = proportion_on_assistance)) +
+   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
+   theme_minimal() +
+   labs(title = "Proportion of Households",
+        fill = "Proportion on\nFood Anxiety")
+#Load in Senior Data
+senior_data <- read.csv("./data/iowa_seniors_by_puma.csv")
+ 
+senior_data <- senior_data %>% mutate("PUMA" = as.character(GEOID))
+ 
+senior_data <- map_data %>% left_join(senior_data, by="PUMA")
+ 
+senior_data <- senior_data %>% mutate(
+   seniors_with_fswrouty = floor(proportion_on_assistance*senior_population)) 
+
+ggplot(data = senior_data) +
+   geom_sf(aes(fill = senior_population)) +
+   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
+   theme_minimal() +
+   labs(title = "Total Population of Seniors by PUMA",
+        fill = "Population of\nSeniors")
+ 
+#Predicted number of seniors on SNAP
+ggplot(data = senior_data) +
+   geom_sf(aes(fill = seniors_with_fswrouty)) +
+   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
+   theme_minimal() +
+   labs(title = "Predicted Seniors w Food Anxiety by PUMA",
+        fill = "Predicted number\nof Seniors with\nFood Anxiety")
 
 
 
