@@ -41,7 +41,7 @@ acs_data <- acs_data %>% group_by(serialno = as.factor(serialno)) %>%
             weight = weight[1],
             faminc_cleaned = first(AGI),
             faminc = first(AGI),
-            donut = ifelse(hhsize == (elderly+kids), 1, 0))
+            donut = as.factor(ifelse(hhsize == (elderly+kids), 1, 0)))
 
 head(acs_data)
 
