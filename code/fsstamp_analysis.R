@@ -20,7 +20,7 @@ source("./code/clean_acs.R")
 
 #Can add or remove including all squared and interaction terms
 #Found that in fsstmp, this didn't improve our model much
-include_squared_interaction = FALSE
+include_squared_interaction = TRUE
 
 cps_data <- as.data.frame(cps_data)
 
@@ -370,11 +370,13 @@ if(include_squared_interaction){
       col1 = colnames(acs_reduced_test)[i][1]
       col2 = colnames(acs_reduced_test)[j][1]
       col_str = paste(col1, col2, sep="_")
-      
+      if((sapply(acs_reduced_test[col2], class) %in% c("integer", "numeric")) & 
+         (sapply(acs_reduced_test[col1], class) %in% c("integer", "numeric"))){
       acs_reduced_test = acs_reduced_test %>% 
         mutate(interaction_term = (acs_reduced_test[col1] * acs_reduced_test[col2])[,1])
       
       names(acs_reduced_test)[names(acs_reduced_test) == "interaction_term"] = col_str
+      }
     } 
   }
 }

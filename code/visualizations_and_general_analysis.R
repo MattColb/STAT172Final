@@ -60,6 +60,8 @@ ggplot(data=acs_data) +
 ggplot(data=acs_data) +
   geom_histogram(aes(x=hhsize, fill=only_seniors), binwidth=1, position="fill")
 
+ggplot(data=acs_data) +
+  geom_histogram(aes(x=hhsize, fill=has_senior), binwidth=1, position="fill")
 
 
 
