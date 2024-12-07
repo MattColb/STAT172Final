@@ -15,6 +15,7 @@ library(dplyr)
 library(rpart)
 library(rpart.plot)
 library(ggplot2)
+library(reshape2)
 
 source("./code/clean_cps.R")
 source("./code/clean_acs.R") 
@@ -36,6 +37,55 @@ cps_data <- cps_data %>% mutate(
 cps_data_f <- cps_data[!is.na(cps_data$FSFOODS),]
 #summary(cps_data_f$FSFOODS) new subset without NAs has 6665 obs, compared to 8420 originally
 #str(cps_data_f)
+
+
+##----Clustering ----
+
+# set up
+data_X <- cps_data[, c( "hhsize", "female", "hispanic", "black", 
+                        "kids", "elderly", "education", "married")]
+
+# standardize all predictor columns 
+data_stand <- apply(data_X, 2, function(x)(x - mean(x))/sd(x))
+
+# compute observation-observation distance (for hierachical clustering) 
+data_dist <- dist(data_stand, method = "euclidean")
+
+# first, let's use the average method to measure cluster-to-cluster similarity 
+data_clust <- hclust(data_dist, method = "average")
+
+# the height of a bar is distance between cluster centers 
+plot(data_clust, labels = cps_data$FSWROUTY, hang = -1)
+
+rect.hclust(data_clust, k = 3, border ="red")
+
+# Making sense of the clusters, obtaining "characterization" of clusters
+data_X$h_cluster <- as.factor(cutree(data_clust, k = 4))
+data_X_long <- melt(data_X, id.vars = c("h_cluster"))
+head(data_X_long)
+ggplot(data = data_X_long) +
+  geom_boxplot(aes(x = h_cluster, y = value, fill = h_cluster)) +
+  facet_wrap(~variable, scales= "free") + 
+  scale_fill_brewer("Cluster \nMembership", palette = "Dark2") +
+  ggtitle("Hierachical Clusters")
+
+# Cluster 1: small households, elderly or retired individuals living alone or with a spouse
+#           => might benefit us to look more into this cluster
+# Cluster 2: young black families
+# Cluster 3: large families with children 
+# Cluster 4: medium size Hispanic families
+#           => big family size with children and elderly  
+# Cluster 5: Outliers or Minimal Engagement
+
+############ Train Test Split ############
+
+# Combine cluster memberships with other features
+model_data <- cps_data[, c("FSFOODS", "weight", "hhsize",  
+                           "female", "hispanic", "black", "kids", "elderly",
+                           "education", "married", "faminc_cleaned")]
+##A BIT CONFUSED ON HOW I SHOULD/CAN IMPLEMENT THIS, DO WE JUST WANNA SAY IT LOOKED
+## LIKE CLUSTERING WAS UNHELPFUL?
+
 
 #Split the data into train/test df forms to use in lasso/ridge later
 RNGkind(sample.kind = "default")
@@ -59,6 +109,40 @@ fsfoods.y.train <- train.df$FSFOODS %>% as.vector()
 fsfoods.y.test <- test.df$FSFOODS %>% as.vector()
 train.weights <- as.vector(train.df$weight)
 test.weights <- as.vector(test.df$weight) #not strictly necessary, for ease of reference
+
+
+
+##----Trying all interaction/squared terms----
+include_squared_interaction = TRUE
+
+reduced_train = train.df %>% 
+  select(c(x_vars, y_var))
+
+reduced_test = test.df %>% 
+  select(c(x_vars, y_var))
+
+#With or without interactions/squared terms
+if(include_squared_interaction){
+  for(i in 1:length(x_vars)){
+    for (j in i:length(x_vars)){
+      col1 = colnames(reduced_train)[i][1]
+      col2 = colnames(reduced_train)[j][1]
+      col_str = paste(col1, col2, sep="_")
+      if((sapply(reduced_train[col2], class) %in% c("integer", "numeric")) & 
+         (sapply(reduced_train[col1], class) %in% c("integer", "numeric"))){
+        reduced_train = reduced_train %>% 
+          mutate(interaction_term = (reduced_train[col1] * reduced_train[col2])[,1])
+        reduced_test = reduced_test %>% 
+          mutate(interaction_term = (reduced_test[col1] * reduced_test[col2])[,1])
+        
+        names(reduced_train)[names(reduced_train) == "interaction_term"] = col_str
+        names(reduced_test)[names(reduced_test) == "interaction_term"] = col_str
+      }
+    } 
+  }
+}
+
+
 
 #----MLE Logistic Regression----
 
@@ -354,6 +438,7 @@ ggplot(data = senior_data) +
   labs(title = "Predicted Seniors w/o Enough Food",
        fill = "Predicted number\nof Seniors w/o\nEnough Food")
 
+#AUC with interaction terms on, lasso = firth = 0.729, ridge = 0.728, forest = 0.674, tree = 0.66, mle = 0.531
 
 
 
