@@ -387,6 +387,8 @@ acs_test_data <- model.matrix(~., data=acs_reduced_test)[,-1]
 ## MAKE PREDICTIONS ON ACS DATA ##
 ##################################
 
+#We chose the ridge model to make our predictions because it had the highest 
+#specificity, which means that we can be more confident that it gets to people who 
 fsstmp_predictions <- predict(lr_ridge_fsstmp, acs_test_data, type="response")[,1]
 
 acs_predicted <- acs_data %>% mutate(

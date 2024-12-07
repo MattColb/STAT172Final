@@ -44,7 +44,8 @@ table(cps_data$FSFOODS, cps_data$FSWROUTY, cps_data$FSSTMPVALC_bin)
 
 acs_data <-acs_data %>%  mutate(
   has_senior = as.factor(ifelse(elderly > 0, "Has Elderly", "Doesn't have Elderly")),
-  only_seniors = as.factor(ifelse(elderly == hhsize, "Only Elderly", "No Elderly"))
+  only_seniors = as.factor(ifelse(elderly == hhsize, "Only Elderly", "No Elderly")),
+  true_donut = as.factor(ifelse(donut != elderly, 1,0))
 )
 
 #Percentage of households with elderly
@@ -63,6 +64,7 @@ ggplot(data=acs_data) +
 ggplot(data=acs_data) +
   geom_histogram(aes(x=hhsize, fill=has_senior), binwidth=1, position="fill")
 
-
+ggplot(data=acs_data) +
+  geom_histogram(aes(x=hhsize, fill=true_donut), binwidth=1, position="fill")
 
 
