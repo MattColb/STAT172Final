@@ -113,7 +113,7 @@ test.weights <- as.vector(test.df$weight) #not strictly necessary, for ease of r
 
 
 ##----Trying all interaction/squared terms----
-include_squared_interaction = TRUE
+include_squared_interaction = FALSE
 
 reduced_train = train.df %>% 
   select(c(x_vars, y_var))
@@ -168,6 +168,7 @@ lr_fmle_fsfoods <- logistf(FSFOODS ~ hhsize + married + education + elderly +
 summary(lr_fmle_fsfoods)
 #look at the coefficients from the MLE logistic regression
 lr_fmle_fsfoods_beta <- lr_fmle_fsfoods %>% coef()
+
 
 #----Lasso and Ridge with Basic X vars----
 
