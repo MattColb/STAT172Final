@@ -278,13 +278,9 @@ ggplot() +
   labs(x = "1 - Specificity", y = "Sensitivity", color = "Model") +
   theme_minimal()
 
-#Then, compare performance on the ACS data THIS NEEDS TO BE CHANGED TO REF THE ACTUAL ACS
-#While we don't need to do a split, as all the ACS data is a "test" split
-#we still need to create matrices so that we can use lasso and ridge on this data
-
-#Split the data into train/test df forms to use in lasso: this is our best model
+#Then, compare performance on the ACS data suing lasso: this is our best model
 #with an AUS of 0.726
-#let's get the lasso pi star, then.
+#let's get the lasso pi star
 lasso_fsfoods_pi_star <- coords(lasso_rocCurve, "best", ref="threshold")$threshold[1]
 
 acs_reduced_test = acs_data %>% 
