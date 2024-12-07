@@ -135,6 +135,10 @@ lr_firths_fsstmp <- logistf(FSSTMPVALC_bin ~ .,
 
 summary(lr_firths_fsstmp)
 
+#We are 95% confident that for every elderly person added to the household
+#the odds that they are on food stamps decrease by between
+#sum
+
 lr_firths_fsstmp_beta <- lr_firths_fsstmp %>% coef()
 
 test.df.preds <- test.df.preds %>% mutate(
@@ -441,6 +445,8 @@ senior_data <- map_data %>% left_join(senior_data, by="PUMA")
 senior_data <- senior_data %>% mutate(
   seniors_on_fsstmp = floor(proportion_on_assistance*senior_population)
 ) 
+
+test_data <- senior_data[senior_data$PUMA == 1901400,]
 
 ggplot(data = senior_data) +
   geom_sf(aes(fill = senior_population)) +
