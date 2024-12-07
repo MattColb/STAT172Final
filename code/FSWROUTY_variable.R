@@ -14,6 +14,7 @@ library(ggplot2)
 library(reshape2)
 library(randomForest)
 library(logistf)
+library(RColorBrewer)
 
 source("code/clean_cps.R")
 
@@ -283,6 +284,8 @@ ridge_model <- glmnet(x_train, y_train, family=binomial(link="logit"),
                                      lambda = best_lambda_lasso,
                                      weights = as.vector(train.df$weight))
 
+ridge_model %>% coef()
+
 # predict probability on the test set
 test_preds <- test.df %>% 
   mutate (
@@ -443,14 +446,52 @@ acs_predicted <- acs_data %>% mutate(
 
 acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
 
+weighted.mean(acs_predicted_only_seniors$fswrouty_probs, acs_predicted_only_seniors$weight)
+
 #How does this adjust with the weights
 summary_by_PUMA <- acs_predicted_only_seniors %>% group_by(PUMA = as.factor(PUMA)) %>% 
   summarise(
     sample_size = sum(hhsize),
     proportion_on_assistance = weighted.mean(fswrouty_probs, weight),
-    only_senior = sum(ifelse(elderly == hhsize, 1, 0)),
-    has_senior = sum(ifelse(elderly > 0, 1, 0))
+    only_senior = sum(ifelse(elderly == hhsize, 1, 0)), #only seniors in the house
+    has_senior = sum(ifelse(elderly > 0, 1, 0)), #house has senior
+    one_senior = sum(ifelse(elderly == hhsize & hhsize == 1, 1, 0)) #only 1 senior in the house
   ) %>% as.data.frame() %>% arrange(desc(proportion_on_assistance))
+
+
+total_sample_size <- nrow(acs_data)
+elderly_summary <- data.frame(
+  Category = c("Households with seniors",
+               "Households with seniors",
+               "Households with only seniors",
+               "Households with only seniors",
+               "Households with only one seniors",
+               "Households with only one seniors"),
+  Count = c(
+    sum(summary_by_PUMA$has_senior),
+    total_sample_size - sum(summary_by_PUMA$has_senior),
+    sum(summary_by_PUMA$only_senior),
+    total_sample_size - sum(summary_by_PUMA$only_senior),
+    sum(summary_by_PUMA$one_senior),
+    total_sample_size - sum(summary_by_PUMA$one_senior)
+),
+  Type = c("Senior", "Remaining")
+)
+
+# Create the stacked bar chart
+ggplot(elderly_summary, aes(x = Category, y = Count, fill = Type)) +
+  geom_bar(stat = "identity", position = "stack") +
+  coord_flip() +
+  labs(
+    title = "Household Composition with Senior Members",
+    x = "Category",
+    y = "Sample Size",
+    fill = "Type"
+  ) +
+  scale_fill_brewer(palette = "Dark2") +
+  theme_minimal()
+
+
 
 #https://www.geoplatform.gov/metadata/258db7ce-2581-4488-bb5e-e387b6119c7a
 sf_data <- st_read("./data/tl_2023_19_puma20/tl_2023_19_puma20.shp")
