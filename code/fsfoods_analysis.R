@@ -15,6 +15,7 @@ library(dplyr)
 library(rpart)
 library(rpart.plot)
 library(ggplot2)
+library(reshape2)
 
 source("./code/clean_cps.R")
 source("./code/clean_acs.R") 
@@ -26,16 +27,17 @@ source("./code/clean_acs.R")
 #FSFOODS indicates whether the household had enough to eat or enough of the kinds of foods they wanted to eat in the past twelve months.
 #FSFOODS is 1 if Not Enough, 0 if Enough
 
-##TASKS
-#try regressions both with and without some meaningful interaction
-#terms to look at the ways your X's could affect each other and the outcome
+#Can add or remove including all squared and interaction terms, but
+#Found that in fsstmp, this didn't improve our model much. So keep term = FALSE.
+include_squared_interaction = FALSE
+
 cps_data <- cps_data %>% mutate(
   donut = as.factor(donut)
 )
-#summary(cps_data$FSFOODS) FSFOODS has 1755 NA's
+#summary(cps_data$FSFOODS) 
+#FSFOODS has 1755 NA's, remove those.
 cps_data_f <- cps_data[!is.na(cps_data$FSFOODS),]
-#summary(cps_data_f$FSFOODS) new subset without NAs has 6665 obs, compared to 8420 originally
-#str(cps_data_f)
+#summary(cps_data_f$FSFOODS): new subset without NAs has 6665 obs, compared to 8420 originally
 
 #Split the data into train/test df forms to use in lasso/ridge later
 RNGkind(sample.kind = "default")
@@ -60,6 +62,38 @@ fsfoods.y.test <- test.df$FSFOODS %>% as.vector()
 train.weights <- as.vector(train.df$weight)
 test.weights <- as.vector(test.df$weight) #not strictly necessary, for ease of reference
 
+
+
+##----Infrastructure to try all interaction/squared terms----
+reduced_train = train.df %>% 
+  select(c(x_vars, y_var))
+
+reduced_test = test.df %>% 
+  select(c(x_vars, y_var))
+
+#With or without interactions/squared terms
+if(include_squared_interaction){
+  for(i in 1:length(x_vars)){
+    for (j in i:length(x_vars)){
+      col1 = colnames(reduced_train)[i][1]
+      col2 = colnames(reduced_train)[j][1]
+      col_str = paste(col1, col2, sep="_")
+      if((sapply(reduced_train[col2], class) %in% c("integer", "numeric")) & 
+         (sapply(reduced_train[col1], class) %in% c("integer", "numeric"))){
+        reduced_train = reduced_train %>% 
+          mutate(interaction_term = (reduced_train[col1] * reduced_train[col2])[,1])
+        reduced_test = reduced_test %>% 
+          mutate(interaction_term = (reduced_test[col1] * reduced_test[col2])[,1])
+        
+        names(reduced_train)[names(reduced_train) == "interaction_term"] = col_str
+        names(reduced_test)[names(reduced_test) == "interaction_term"] = col_str
+      }
+    } 
+  }
+}
+
+
+
 #----MLE Logistic Regression----
 
 lr_mle_fsfoods <- glm(FSFOODS ~ hhsize + married + education + elderly +
@@ -69,7 +103,7 @@ lr_mle_fsfoods <- glm(FSFOODS ~ hhsize + married + education + elderly +
                      weights=weight
 )
 # Get warnings - algorithm did not converge, complete separation occurred
-summary(lr_mle_fsfoods) #grossly high standard error on all vars, confirms complete separation
+summary(lr_mle_fsfoods) #very high standard error on all vars, confirms complete separation
 
 #look at the coefficients from the MLE logistic regression
 lr_mle_fsfoods_beta <- lr_mle_fsfoods %>% coef()
@@ -82,25 +116,26 @@ lr_fmle_fsfoods <- logistf(FSFOODS ~ hhsize + married + education + elderly +
                            weights=train.weights)
 
 summary(lr_fmle_fsfoods)
-#look at the coefficients from the MLE logistic regression
+#look at the coefficients from the FMLE logistic regression
 lr_fmle_fsfoods_beta <- lr_fmle_fsfoods %>% coef()
+
 
 #----Lasso and Ridge with Basic X vars----
 
 #Use cross validation to get tuning info for final regression
-fsfoods_lasso_cv <- cv.glmnet(fsfoods.x.train, #MATRIX without our Y COLUMN
-                         fsfoods.y.train, #VECTOR - our Y COLUMN
+fsfoods_lasso_cv <- cv.glmnet(fsfoods.x.train, 
+                         fsfoods.y.train, 
                          family = binomial(link = "logit"),
                          alpha = 1, 
-                         weights = train.weights #1 for lasso, 0 for ridge
+                         weights = train.weights 
                          )
 
 
-fsfoods_ridge_cv <- cv.glmnet(fsfoods.x.train, #MATRIX without our Y COLUMN
-                         fsfoods.y.train, #VECTOR - our Y COLUMN
+fsfoods_ridge_cv <- cv.glmnet(fsfoods.x.train, 
+                         fsfoods.y.train, 
                          family = binomial(link = "logit"),
                          alpha = 0,
-                         weights = train.weights#1 for lasso, 0 for ridge
+                         weights = train.weights
                           )
 
 #Find and extract minimizing lambda values
@@ -113,10 +148,10 @@ best_ridge_lambda <- fsfoods_ridge_cv$lambda.min
 #fit final lasso + ridge models
 fsfoods_lasso_f1 <- glmnet(fsfoods.x.train, fsfoods.y.train, 
                       family = binomial(link = "logit"), alpha = 1,
-                      lambda = best_lasso_lambda) #this lambda is what actually tunes the model
+                      lambda = best_lasso_lambda) 
 fsfoods_ridge_f1 <- glmnet(fsfoods.x.train, fsfoods.y.train, 
                       family = binomial(link = "logit"), alpha = 0,
-                      lambda = best_ridge_lambda) #this lambda is what actually tunes the model
+                      lambda = best_ridge_lambda) 
 
 #----Random Forest----
 
@@ -161,11 +196,6 @@ final_forest <- randomForest(FSFOODS_fact ~ hhsize + married + education + elder
                              mtry=best_m,
                              ntree=1000,
                              importance=TRUE)
-
-#plot(rf_rocCurve, print.thres=TRUE, print.auc=TRUE)
-
-#rf_pi_star <- coords(rf_rocCurve, "best", ret="threshold")$threshold[1]
-#pi star is 0.0055 idk what that means but im saving it just in case ig
 
 #making a variable importance plot based on decrease in forest accuracy
 varImpPlot(final_forest, type=1)
@@ -278,13 +308,9 @@ ggplot() +
   labs(x = "1 - Specificity", y = "Sensitivity", color = "Model") +
   theme_minimal()
 
-#Then, compare performance on the ACS data THIS NEEDS TO BE CHANGED TO REF THE ACTUAL ACS
-#While we don't need to do a split, as all the ACS data is a "test" split
-#we still need to create matrices so that we can use lasso and ridge on this data
-
-#Split the data into train/test df forms to use in lasso: this is our best model
-#with an AUS of 0.726
-#let's get the lasso pi star, then.
+#Then, compare performance on the ACS data suing lasso: this is our best model
+#with an AUC of 0.729.
+#let's get the lasso pi star
 lasso_fsfoods_pi_star <- coords(lasso_rocCurve, "best", ref="threshold")$threshold[1]
 
 acs_reduced_test = acs_data %>% 
@@ -302,20 +328,17 @@ acs_predicted <- acs_data %>% mutate(
   fsfoods_prediction = ifelse(fsfoods_prop_preds > lasso_fsfoods_pi_star, 1, 0),
   fsfoods_prop_preds = fsfoods_prop_preds
 )
-head(acs_predicted$fsfoods_prop_preds)
 
-#if only concerned with senior households use this data
-acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
-
+#BASIC PREDICTION WITHOUT SENIORS
 #summary, not using weighted mean
 summary_by_PUMA <- acs_predicted %>% group_by(PUMA = as.factor(PUMA)) %>% 
   summarise(
     sample_size = sum(hhsize),
-    proportion_on_assistance = mean(fsfoods_prop_preds),
+    proportion_on_assistance = weighted.mean(fsfoods_prop_preds),
     only_senior = sum(ifelse(elderly == hhsize, 1, 0)),
     has_senior = sum(ifelse(elderly > 0, 1, 0))
   ) %>% as.data.frame() %>% arrange(desc(proportion_on_assistance))
-
+head(summary_by_PUMA)
 #https://www.geoplatform.gov/metadata/258db7ce-2581-4488-bb5e-e387b6119c7a
 sf_data <- st_read("./data/tl_2023_19_puma20/tl_2023_19_puma20.shp")
 
@@ -324,6 +347,7 @@ colnames(sf_data)[colnames(sf_data) == "GEOID20"] = "PUMA"
 map_data <- sf_data %>%
   left_join(summary_by_PUMA, by = "PUMA")
 
+#proportion of GENERAL households without enough food
 ggplot(data = map_data) +
   geom_sf(aes(fill = proportion_on_assistance)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
@@ -331,18 +355,49 @@ ggplot(data = map_data) +
   labs(title = "Proportion of Households without Enough Food",
        fill = "Proportion without\nEnough Food")
 
-ggplot(data = map_data) +
-  geom_sf(aes(fill = proportion_has_senior)) +
+#Load in Senior Data
+acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
+
+senior_data <- read.csv("./data/iowa_seniors_by_puma.csv")
+
+senior_data <- senior_data %>% mutate("PUMA" = as.character(GEOID))
+
+senior_data <- map_data %>% left_join(senior_data, by="PUMA")
+
+senior_data <- senior_data %>% mutate(
+  seniors_with_fsfoods = floor(proportion_on_assistance*senior_population)) 
+#No predictions, just the SENIORS in each PUMA
+ggplot(data = senior_data) +
+  geom_sf(aes(fill = senior_population)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
   theme_minimal() +
-  labs(title = "Proportion of Households with Senior",
-       fill = "Proportion of\nHouseholds with\nSeniors")
+  labs(title = "Total Population of Seniors by PUMA",
+       fill = "Population of\nSeniors")
 
-ggplot(data = map_data) +
-  geom_sf(aes(fill = total_weights_by_sample)) +
+#Predicted number of SENIORS without enough food
+ggplot(data = senior_data) +
+  geom_sf(aes(fill = seniors_with_fsfoods)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
   theme_minimal() +
-  labs(title = "Population By PUMA",
-       fill = "PUMA Population")
+  labs(title = "Predicted Seniors w/o Enough Food",
+       fill = "Predicted number\nof Seniors w/o\nEnough Food")
 
+#Model-Specific Predictions for Analysis
 
+#Use specificity from AUC graph to measure model performance
+plot(lasso_rocCurve, print.thres=TRUE, print.auc=TRUE)
+#gives (0.777, 0.570)
+#0.57 rate of predicting correctly when people are in need
+#0.78 rate of predicting correctly when people are not in need
+
+head(acs_predicted$fsfoods_prop_preds)
+weighted.mean(acs_predicted$fsfoods_prop_preds, acs_predicted$weight)
+#0.1564382, this is the overall proportion of the state predicted to be without enough food.
+
+head(acs_predicted_only_seniors)
+weighted.mean(acs_predicted_only_seniors$fsfoods_prop_preds, acs_predicted_only_seniors$weight)
+#0.09212924, this is the overall prop of seniors predicted to be w/o enough food.
+
+lr_lasso_coefs <- coef(fsfoods_lasso_f1, s = "lambda.min") %>% as.matrix()
+#The elderly coefficient here is -0.109 - for every 1 elderly, the odds of
+#having enough decrease by 10.9%.
