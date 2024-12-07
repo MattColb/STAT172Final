@@ -16,11 +16,13 @@ library(randomForest)
 source("./code/clean_cps.R")
 source("./code/clean_acs.R")
 
-#Predictors are shooting way to high
-
 #Can add or remove including all squared and interaction terms
 #Found that in fsstmp, this didn't improve our model much
-include_squared_interaction = TRUE
+#These terms would often help the weaker models, such as taking a
+#.5 AUC of a ctree up to a .6, but often saw small decreases in our
+#models that were the best. Ridge and lasso, for example,
+#generally saw their AUCs decrease by about .05=.
+include_squared_interaction = FALSE
 
 cps_data <- as.data.frame(cps_data)
 
@@ -119,7 +121,7 @@ lr_mle_fsstmp_rocCurve <- roc(
   predictor= test.df.preds$lr_mle_fsstmp_preds,
   levels=c("0","1"))
 
-plot(lr_mle_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #.514 AUC (.978, .049) THIS IS REALLY BAD
+plot(lr_mle_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #AUC = .624 (.949, .641)
 
 lr_mle_fsstmp_pi_star <- coords(lr_mle_fsstmp_rocCurve, "best", ref="threshold")$threshold[1]
 
@@ -144,7 +146,7 @@ lr_firths_fsstmp_rocCurve <- roc(
   predictor= test.df.preds$lr_firths_fsstmp_preds,
   levels=c("0","1"))
 
-plot(lr_firths_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #.798 AUC (.690, .803)
+plot(lr_firths_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #AUC = .887 (.775, .863)
 
 lr_firths_fsstmp_pi_star <- coords(lr_firths_fsstmp_rocCurve, "best", ref="threshold")$threshold[1]
 
@@ -174,7 +176,7 @@ lasso_fsstmp_rocCurve <- roc(response = as.factor(test.df.preds$FSSTMPVALC_bin),
                              predictor =test.df.preds$lasso_fsstmp_preds,
                              levels=c("0", "1"))
 
-plot(lasso_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #Better at AUC = .798, (.681, .810)
+plot(lasso_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #AUC = .887 (.775, .863)
 
 lasso_fsstmp_pi_star <- coords(lasso_fsstmp_rocCurve, "best", ref="threshold")$threshold[1]
 
@@ -204,7 +206,9 @@ ridge_fsstmp_rocCurve <- roc(response = as.factor(test.df.preds$FSSTMPVALC_bin),
                              predictor = test.df.preds$ridge_fsstmp_preds,
                              levels=c("0", "1"))
 
-plot(ridge_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #.800 (.684,.810)
+plot(ridge_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #AUC = .888 (.802, .837)
+#Predict no snap 80.2% of the time it actually happens
+#Predict snap 83.7% of the time it actually happens
 
 ridge_fsstmp_pi_star <- coords(ridge_fsstmp_rocCurve, "best", ref="threshold")$threshold[1]
 
@@ -257,7 +261,7 @@ rf_rocCurve <- roc(response=rf_test$FSSTMPVALC_bin_fact,
                 predictor=pi_hat,
                 levels=c("No", "Yes"))
 
-plot(rf_rocCurve, print.thres=TRUE, print.auc=TRUE)
+plot(rf_rocCurve, print.thres=TRUE, print.auc=TRUE) #AUC = .774 (.755, .745)
 
 rf_fsstmp_pi_star <- coords(rf_rocCurve, "best", ret="threshold")$threshold[1]
 
@@ -294,7 +298,7 @@ ctree_rocCurve <- roc(response=rf_test$FSSTMPVALC_bin_fact,
                    predictor=pi_hat,
                    levels=c("No", "Yes"))
 
-plot(ctree_rocCurve, print.thres=TRUE, print.auc=TRUE)
+plot(ctree_rocCurve, print.thres=TRUE, print.auc=TRUE) # AUC=.5
 
 ctree_fsstmp_pi_star <- coords(rf_rocCurve, "best", ret="threshold")$threshold[1]
 
@@ -352,7 +356,8 @@ roc_data <- rbind(mle_lr_auc, firths_lr_auc, lasso_lr_auc, ridge_lr_auc, ctree_a
 
 ggplot() +
   geom_line(aes(x = 1 - Specificity, y = Sensitivity, color = Model),data = roc_data) +
-  scale_colour_brewer(palette = "Paired") +
+  scale_colour_brewer("Model", palette = "Paired") +
+  title("AUCs of all created models")
   labs(x = "1 - Specificity", y = "Sensitivity", color = "Model") +
   theme_minimal()
 
@@ -387,7 +392,7 @@ acs_test_data <- model.matrix(~., data=acs_reduced_test)[,-1]
 ## MAKE PREDICTIONS ON ACS DATA ##
 ##################################
 
-#We chose the ridge model to make our predictions because it had the highest 
+#We chose the lasso model to make our predictions because it had the highest 
 #specificity, which means that we can be more confident that it gets to people who 
 fsstmp_predictions <- predict(lr_ridge_fsstmp, acs_test_data, type="response")[,1]
 
@@ -396,6 +401,9 @@ acs_predicted <- acs_data %>% mutate(
 )
 
 acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
+
+#What percentage of Iowa is on SNAP/FSSTMP
+weighted.mean(acs_predicted_only_seniors$fsstmp_probabilities, acs_predicted_only_seniors$weight)
 
 #How does this adjust with the weights
 summary_by_PUMA <- acs_predicted_only_seniors %>% group_by(PUMA = as.factor(PUMA)) %>% 
@@ -421,7 +429,7 @@ ggplot(data = map_data) +
   theme_minimal() +
   labs(title = "Proportion of Households with Seniors on SNAP/Food Stamps",
        fill = "Proportion on\nFood Stamps/SNAP")
-ggsave("figures/propotion_of_seniors_predicted.png")
+ggsave("figures/propotion_of_seniors_predicted.png", width=6, height=5)
 
 #Load in Senior Data
 senior_data <- read.csv("./data/iowa_seniors_by_puma.csv")
@@ -440,7 +448,7 @@ ggplot(data = senior_data) +
   theme_minimal() +
   labs(title = "Total Population of Seniors by PUMA",
        fill = "Population of\nSeniors")
-ggsave("figures/number_of_seniors_by_puma.png")
+ggsave("figures/number_of_seniors_by_puma.png", width=6, height=5)
 
 #Predicted number of seniors on SNAP
 ggplot(data = senior_data) +
@@ -449,4 +457,4 @@ ggplot(data = senior_data) +
   theme_minimal() +
   labs(title = "Predicted Number of Seniors on SNAP by PUMA",
        fill = "Predicted number\nof Seniors\non SNAP")
-ggsave("figures/number_on_seniors_fsstmp.png")
+ggsave("figures/number_on_seniors_fsstmp.png", width=6, height=5)
