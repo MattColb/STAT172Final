@@ -406,6 +406,8 @@ acs_predicted <- acs_data %>% mutate(
 
 acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
 
+write.csv(acs_predicted_only_seniors, "./data/fsstmp_prediction.csv")
+
 #What percentage of Iowa is on SNAP/FSSTMP
 weighted.mean(acs_predicted_only_seniors$fsstmp_probabilities, acs_predicted_only_seniors$weight)
 

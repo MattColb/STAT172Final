@@ -137,18 +137,3 @@ weighted.mean(acs_data$only_seniors_bin, acs_data$weight)
 
 weighted.mean(acs_data$has_seniors_bin, acs_data$weight)
 
-df <- as.factor(df)
-data <- table(cps_data$FSFOOD, cps_data$FSWROUTY)
-ggplot(cps_data, aes(x = FSFOODS, y = FSWROUTY, fill = Count)) +
-  geom_tile() +
-  scale_fill_brewer()
-  labs(title = "Relationship Between FSFOODS, FSWROUTY, and FSSTMPVALC_bin",
-       x = "FSFOODS",
-       y = "FSWROUTY",
-       fill = "Count")
-
-d <- melt(table(FSFOODS=cps_data$FSFOODS, FSWROUTY=cps_data$FSWROUTY))
-ggplot(data=d) +
-  geom_tile(aes(x=FSFOODS, y=FSWROUTY, fill=value)) +
-  scale_fill_brewer(palette="Dark2")
-
