@@ -33,7 +33,7 @@ ggplot(data=merged_standard) + geom_histogram(aes(x=sum_of_z_scores))
 summary_by_PUMA <- merged_standard %>% group_by(PUMA = as.factor(PUMA)) %>% 
   summarise(
     sample_size = sum(hhsize),
-    food_insecurity_metric = weighted.mean(mean_of_z_scores, weight),
+    food_insecurity_metric = weighted.mean(fsstmp_probabilities, weight),
   ) %>% as.data.frame() %>% arrange(desc(food_insecurity_metric))
 
 sf_data <- st_read("./data/tl_2023_19_puma20/tl_2023_19_puma20.shp")
