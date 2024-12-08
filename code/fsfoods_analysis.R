@@ -358,6 +358,9 @@ ggplot(data = map_data) +
 #Load in Senior Data
 acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
 
+#write to file for further analysis
+write.csv(acs_predicted_only_seniors, "./data/fsfoods_prediction.csv")
+
 senior_data <- read.csv("./data/iowa_seniors_by_puma.csv")
 
 senior_data <- senior_data %>% mutate("PUMA" = as.character(GEOID))
@@ -400,4 +403,6 @@ weighted.mean(acs_predicted_only_seniors$fsfoods_prop_preds, acs_predicted_only_
 
 lr_lasso_coefs <- coef(fsfoods_lasso_f1, s = "lambda.min") %>% as.matrix()
 #The elderly coefficient here is -0.109 - for every 1 elderly, the odds of
-#having enough decrease by 10.9%.
+#having enough decrease by 10.9%. EXPONENTIATE THIS
+#e^exp(-0.109)
+#write out your acs_predicted with only seniors into a csv then put it in the 
