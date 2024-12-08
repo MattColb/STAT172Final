@@ -1,6 +1,8 @@
 rm(list=ls())
 
 library(ggplot2)
+library(sf)
+library(tidyverse)
 
 fswrouty <- read.csv("./data/fswrouty_prediction.csv")
 
@@ -23,7 +25,7 @@ merged_standard <- merged
 merged_standard[,c("fswrouty_probs", "fsstmp_probabilities")] <- apply(merged, 2, function(x)(x - mean(x))/sd(x))[,c("fswrouty_probs", "fsstmp_probabilities")]
 
 merged_standard <- merged_standard %>% mutate(
-  sum_of_z_scores = (fswrouty_probs + fsstmp_probabilities)/2
+  mean_of_z_scores = (fswrouty_probs + fsstmp_probabilities)/2
 )
 
 ggplot(data=merged_standard) + geom_histogram(aes(x=sum_of_z_scores))
@@ -31,7 +33,7 @@ ggplot(data=merged_standard) + geom_histogram(aes(x=sum_of_z_scores))
 summary_by_PUMA <- merged_standard %>% group_by(PUMA = as.factor(PUMA)) %>% 
   summarise(
     sample_size = sum(hhsize),
-    food_insecurity_metric = sum(sum_of_z_scores),
+    food_insecurity_metric = weighted.mean(mean_of_z_scores, weight),
   ) %>% as.data.frame() %>% arrange(desc(food_insecurity_metric))
 
 sf_data <- st_read("./data/tl_2023_19_puma20/tl_2023_19_puma20.shp")
@@ -48,4 +50,23 @@ ggplot(data = map_data) +
   theme_minimal() +
   labs(title = "Proportion of Households with Seniors on SNAP/Food Stamps",
        fill = "Proportion on\nFood Stamps/SNAP")
-ggsave("figures/propotion_of_seniors_predicted.png", width=6, height=5)
+ggsave("figures/test.png", width=6, height=5)
+
+
+senior_data <- read.csv("./data/iowa_seniors_by_puma.csv")
+
+senior_data <- senior_data %>% mutate("PUMA" = as.character(GEOID))
+
+senior_data <- map_data %>% left_join(senior_data, by="PUMA")
+
+senior_data <- senior_data %>% mutate(
+  seniors_on_fsstmp = floor(food_insecurity_metric*senior_population)
+) 
+
+ggplot(data = senior_data) +
+  geom_sf(aes(fill = seniors_on_fsstmp)) +
+  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
+  theme_minimal() +
+  labs(title = "Predicted Number of Seniors on SNAP by PUMA",
+       fill = "Predicted number\nof Seniors\non SNAP")
+ggsave("figures/test2.png", width=6, height=5)

@@ -448,8 +448,6 @@ senior_data <- senior_data %>% mutate(
   seniors_on_fsstmp = floor(proportion_on_assistance*senior_population)
 ) 
 
-test_data <- senior_data[senior_data$PUMA == 1901400,]
-
 ggplot(data = senior_data) +
   geom_sf(aes(fill = senior_population)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
