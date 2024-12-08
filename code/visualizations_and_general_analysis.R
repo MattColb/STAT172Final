@@ -44,11 +44,22 @@ cps_data <- cps_data %>% mutate(
 )
 
 ggplot(cps_data) + 
-  geom_bar(aes(x=FSSTMPVALC_bin_fact, fill=has_elderly_fact), position="fill") +
+  geom_bar(aes(x=as.factor(FSSTMPVALC_bin_char), fill=has_elderly_fact), position="fill") +
   scale_fill_brewer("Elders in household", palette="Dark2") +
   labs(y="Proportion of households", x="Are they on Food Stamps/SNAP?") + 
+  ggtitle("Proportion of households with elderly people on Food Stamps/SNAP")+
   title("Proportion of households with elderly people on Food Stamps/SNAP")
-ggsave("./figures/fsstmp_household_elderly.png", width=6, height=5)
+ggsave("./figures/fsstmp_household_elderly.png", width=8, height=5)
+
+
+
+ggplot(data=cps_data) +
+  geom_histogram(aes(x=sum_of_food_insecurity, fill=has_elderly_fact), binwidth=1) + 
+  labs(x="Number of food insecurity indicators", y="Count") +
+  title("Total investigated food insecurity indicators") + 
+  ggtitle("Total investigated food insecurity indicators") +
+  scale_fill_brewer("Seniors in household", palette="Dark2")
+ggsave("./figures/food_insecurity_indicators")
 
 #######################################
 #  Visualizing percentage of elderly  #
@@ -108,7 +119,7 @@ cps_elderly <- cps_data[cps_data$elderly >= 1,]
 cps_nonelderly <- cps_data[cps_data$elderly < 1,]
 
 #Weighted mean for FSSTMP
-weighted.mean(cps_nonelderly$FSSTMPVALC_bin, cps_nonelderly$weight)
+weighted.mean(cps_data$FSSTMPVALC_bin, cps_data$weight)
 
 weighted.mean(cps_elderly$FSSTMPVALC_bin, cps_elderly$weight)
 
@@ -125,3 +136,19 @@ weighted.mean(cps_elderly$FSWROUTY, cps_elderly$weight, na.rm=TRUE)
 weighted.mean(acs_data$only_seniors_bin, acs_data$weight)
 
 weighted.mean(acs_data$has_seniors_bin, acs_data$weight)
+
+df <- as.factor(df)
+data <- table(cps_data$FSFOOD, cps_data$FSWROUTY)
+ggplot(cps_data, aes(x = FSFOODS, y = FSWROUTY, fill = Count)) +
+  geom_tile() +
+  scale_fill_brewer()
+  labs(title = "Relationship Between FSFOODS, FSWROUTY, and FSSTMPVALC_bin",
+       x = "FSFOODS",
+       y = "FSWROUTY",
+       fill = "Count")
+
+d <- melt(table(FSFOODS=cps_data$FSFOODS, FSWROUTY=cps_data$FSWROUTY))
+ggplot(data=d) +
+  geom_tile(aes(x=FSFOODS, y=FSWROUTY, fill=value)) +
+  scale_fill_brewer(palette="Dark2")
+

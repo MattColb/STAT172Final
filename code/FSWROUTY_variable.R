@@ -14,6 +14,7 @@ library(ggplot2)
 library(reshape2)
 library(randomForest)
 library(logistf)
+library(RColorBrewer)
 
 source("code/clean_cps.R")
 
@@ -53,7 +54,7 @@ plot(data_clust, labels = cps_data$FSWROUTY, hang = -1)
 rect.hclust(data_clust, k = 3, border ="red")
 
 # Making sense of the clusters, obtaining "characterization" of clusters
-data_X$h_cluster <- as.factor(cutree(data_clust, k = 4))
+data_X$h_cluster <- as.factor(cutree(data_clust, k = 5))
 data_X_long <- melt(data_X, id.vars = c("h_cluster"))
 head(data_X_long)
 ggplot(data = data_X_long) +
@@ -129,7 +130,7 @@ test_preds <- test.df %>%
   )
 
 firths_fswrouty_rocCurve <- roc(
-  response=as.factor(test_preds$FSWROUTY_bin),
+  response=test_preds$FSWROUTY_bin,
   predictor= test_preds$firths_fswrouty_prob,
   levels=c("0","1"))
 
@@ -139,14 +140,8 @@ firth_fswrouty_pi_hat <- coords(firths_fswrouty_rocCurve, "best", ref="threshold
 
 
 ############# RANDOM FOREST ###################
-
-
-rf_fswrouty_temp <- randomForest(as.factor(FSWROUTY_bin) ~ .,
-                           data = train.df,
-                           ntree = 1000,
-                           mtry = floor(sqrt(length(x_vars))),
-                           importance = TRUE)
-
+x_vars <- c("hhsize", "female", "hispanic", "black", "faminc_cleaned",
+            "kids", "elderly", "education", "married")
 #Multiple mtry
 mtry = c(1:length(x_vars))
 keeps <- data.frame(m=rep(NA, length(mtry)),
@@ -154,7 +149,9 @@ keeps <- data.frame(m=rep(NA, length(mtry)),
 
 for (idx in 1:length(mtry)){
   print(paste0("Trying m = ", mtry[idx]))
-  tempforest <- randomForest(as.factor(FSWROUTY_bin) ~.,
+  tempforest <- randomForest(as.factor(FSWROUTY_bin) ~ hhsize + married + education 
+                             + elderly + kids + black + hispanic + female 
+                             + faminc_cleaned,
                              data= train.df,
                              ntree=1000,
                              mtry=mtry[idx])
@@ -173,10 +170,12 @@ ggplot(keeps, aes(x = m, y = OOB_err_rate)) +
   theme_minimal()
 
 # final RF model
-rf_fswrouty <- randomForest(as.factor(FSWROUTY_bin) ~ .,
+rf_fswrouty <- randomForest(as.factor(FSWROUTY_bin) ~ hhsize + married + education 
+                            + elderly + kids + black + hispanic + female 
+                            + faminc_cleaned,
                                  data = train.df,
                                  ntree = 1000,
-                                 mtry = best_m,
+                                 mtry = 2,
                                  importance = TRUE)
 
 # Validate model as predictive tool
@@ -284,6 +283,8 @@ ridge_model <- glmnet(x_train, y_train, family=binomial(link="logit"),
                                      alpha = 0, 
                                      lambda = best_lambda_lasso,
                                      weights = as.vector(train.df$weight))
+
+ridge_model %>% coef()
 
 # predict probability on the test set
 test_preds <- test.df %>% 
@@ -423,8 +424,114 @@ ggplot(data = senior_data) +
    labs(title = "Predicted Seniors w Food Anxiety by PUMA",
         fill = "Predicted number\nof Seniors with\nFood Anxiety")
 
+##################################################################
+############# ACS ##############
+
+source("./code/clean_acs.R")
+acs_reduced_test = acs_data %>% 
+  select(x_vars) 
+
+acs_test_data <- model.matrix(~., data=acs_reduced_test)[,-1]
+
+## MAKE PREDICTIONS ON ACS DATA ##
+
+fswrouty_predictions <- predict(lasso_model, acs_test_data, type="response")[,1]
+
+# Check the first few predictions
+head(fswrouty_predictions)
+
+acs_predicted <- acs_data %>% mutate(
+  fswrouty_probs = fswrouty_predictions
+)
+
+acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
+
+weighted.mean(acs_predicted_only_seniors$fswrouty_probs, acs_predicted_only_seniors$weight)
+
+#How does this adjust with the weights
+summary_by_PUMA <- acs_predicted_only_seniors %>% group_by(PUMA = as.factor(PUMA)) %>% 
+  summarise(
+    sample_size = sum(hhsize),
+    proportion_on_assistance = weighted.mean(fswrouty_probs, weight),
+    only_senior = sum(ifelse(elderly == hhsize, 1, 0)), #only seniors in the house
+    has_senior = sum(ifelse(elderly > 0, 1, 0)), #house has senior
+    one_senior = sum(ifelse(elderly == hhsize & hhsize == 1, 1, 0)) #only 1 senior in the house
+  ) %>% as.data.frame() %>% arrange(desc(proportion_on_assistance))
+
+
+total_sample_size <- nrow(acs_data)
+elderly_summary <- data.frame(
+  Category = c("Households with seniors",
+               "Households with seniors",
+               "Households with only seniors",
+               "Households with only seniors",
+               "Households with only one seniors",
+               "Households with only one seniors"),
+  Count = c(
+    sum(summary_by_PUMA$has_senior),
+    total_sample_size - sum(summary_by_PUMA$has_senior),
+    sum(summary_by_PUMA$only_senior),
+    total_sample_size - sum(summary_by_PUMA$only_senior),
+    sum(summary_by_PUMA$one_senior),
+    total_sample_size - sum(summary_by_PUMA$one_senior)
+),
+  Type = c("Senior", "Remaining")
+)
+
+# Create the stacked bar chart
+ggplot(elderly_summary, aes(x = Category, y = Count, fill = Type)) +
+  geom_bar(stat = "identity", position = "stack") +
+  coord_flip() +
+  labs(
+    title = "Household Composition with Senior Members",
+    x = "Category",
+    y = "Sample Size",
+    fill = "Type"
+  ) +
+  scale_fill_brewer(palette = "Dark2") +
+  theme_minimal()
 
 
 
+#https://www.geoplatform.gov/metadata/258db7ce-2581-4488-bb5e-e387b6119c7a
+sf_data <- st_read("./data/tl_2023_19_puma20/tl_2023_19_puma20.shp")
 
+colnames(sf_data)[colnames(sf_data) == "GEOID20"] = "PUMA"
+
+map_data <- sf_data %>%
+  left_join(summary_by_PUMA, by = "PUMA")
+
+#Proportion of seniors that are on SNAP/Food Stamps
+ggplot(data = map_data) +
+  geom_sf(aes(fill = proportion_on_assistance)) +
+  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
+  theme_minimal() +
+  labs(title = "Proportion of Households",
+       fill = "Proportion on\nFood Anxiety")
+
+#Load in Senior Data
+senior_data <- read.csv("./data/iowa_seniors_by_puma.csv")
+
+senior_data <- senior_data %>% mutate("PUMA" = as.character(GEOID))
+
+senior_data <- map_data %>% left_join(senior_data, by="PUMA")
+
+senior_data <- senior_data %>% mutate(
+  seniors_with_fswrouty = floor(proportion_on_assistance*senior_population)
+) 
+
+ggplot(data = senior_data) +
+  geom_sf(aes(fill = senior_population)) +
+  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
+  theme_minimal() +
+  labs(title = "Total Population of Seniors by PUMA",
+       fill = "Population of\nSeniors")
+
+#Predicted number of seniors anxiety
+ggplot(data = senior_data) +
+  geom_sf(aes(fill = seniors_with_fswrouty)) +
+  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
+  theme_minimal() +
+  labs(title = "Predicted Seniors w Food Anxiety by PUMA",
+       fill = "Predicted number\nof Seniors\nwith Food Anxiety")
 
