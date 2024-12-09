@@ -43,6 +43,38 @@ cps_data <- cps_data %>% mutate(
   has_elderly_fact = as.factor(ifelse(elderly > 0, "Has elderly", "Doesn't have elderly"))
 )
 
+#Creating visuals of y-variable overlap
+ggplot(cps_data[!is.na(cps_data$FSWROUTY), ]) +
+  geom_bar(aes(x=as.factor(FSSTMPVALC_bin_char), fill=
+                             as.factor(ifelse(FSWROUTY==1, "Has food anxiety", "Doesn't have food anxiety"))), 
+           position="fill") +
+  labs(title = "Proportion of people with food anxiety based on SNAP status", 
+       x="Are they receiving SNAP benefits?", y="Proportion") +
+  ggtitle("Proportion of people with food anxiety based on SNAP status") +
+  scale_fill_brewer("Do they\nworry about food?", palette = "Dark2")
+ggsave("./figures/FSSTMP_FSWROUTY_ANALYSIS.png", width=7, height=7.5)
+
+ggplot(cps_data[!is.na(cps_data$FSFOODS), ]) +
+  geom_bar(aes(x=as.factor(FSSTMPVALC_bin_char), fill=
+                 as.factor(ifelse(FSFOODS==1, "Yes", "No"))), 
+           position="fill") +
+  labs(title = "Proportion of people not getting preferred food based on SNAP status", 
+       x="Are they receiving SNAP benefits?", y="Proportion") +
+  ggtitle("Proportion of people not getting preferred food based on SNAP status") +
+  scale_fill_brewer("Do they\nget the food\nthey want?", palette = "Dark2")
+ggsave("./figures/FSSTMP_FSFOODS_ANALYSIS.png", width=7, height=7.5)
+
+ggplot(cps_data[!is.na(cps_data$FSFOODS) & !is.na(cps_data$FSWROUTY), ]) +
+  geom_bar(aes(x=as.factor(ifelse(FSWROUTY==1, "Has food anxiety", "Doesn't have food anxiety")), fill=
+                 as.factor(ifelse(FSFOODS==1, "Yes", "No"))), 
+           position="fill") +
+  labs(title = "Proportion of people not getting preferred food based on food anxiety", 
+       x="Do they have food anxiety?", y="Proportion") +
+  ggtitle("Proportion of people not getting preferred food based on food anxiety") +
+  scale_fill_brewer("Do they\nget the food\nthey want?", palette = "Dark2")
+ggsave("./figures/FSWROUTY_FSFOODS_ANALYSIS.png", width=7, height=7.5)
+
+#Look at the proportion of people that are on/not on SNAP that are seniors
 ggplot(cps_data) + 
   geom_bar(aes(x=as.factor(FSSTMPVALC_bin_char), fill=has_elderly_fact), position="fill") +
   scale_fill_brewer("Elders in household", palette="Dark2") +
@@ -51,6 +83,7 @@ ggplot(cps_data) +
   title("Proportion of households with elderly people on Food Stamps/SNAP")
 ggsave("./figures/fsstmp_household_elderly.png", width=8, height=5)
 
+<<<<<<< HEAD
 
 ggplot(data=cps_data) +
   geom_histogram(aes(x=sum_of_food_insecurity, fill=has_elderly_fact), binwidth=1) + 
@@ -60,6 +93,8 @@ ggplot(data=cps_data) +
   scale_fill_brewer("Seniors in household", palette="Dark2")
 ggsave("./figures/food_insecurity_indicators")
 
+=======
+>>>>>>> ef74e38d361b36563f5fb2baea50c3f96552e031
 #######################################
 #  Visualizing percentage of elderly  #
 #######################################
@@ -135,19 +170,4 @@ weighted.mean(cps_elderly$FSWROUTY, cps_elderly$weight, na.rm=TRUE)
 weighted.mean(acs_data$only_seniors_bin, acs_data$weight)
 
 weighted.mean(acs_data$has_seniors_bin, acs_data$weight)
-
-df <- as.factor(df)
-data <- table(cps_data$FSFOOD, cps_data$FSWROUTY)
-ggplot(cps_data, aes(x = FSFOODS, y = FSWROUTY, fill = Count)) +
-  geom_tile() +
-  scale_fill_brewer()
-  labs(title = "Relationship Between FSFOODS, FSWROUTY, and FSSTMPVALC_bin",
-       x = "FSFOODS",
-       y = "FSWROUTY",
-       fill = "Count")
-
-d <- melt(table(FSFOODS=cps_data$FSFOODS, FSWROUTY=cps_data$FSWROUTY))
-ggplot(data=d) +
-  geom_tile(aes(x=FSFOODS, y=FSWROUTY, fill=value)) +
-  scale_fill_brewer(palette="Dark2")
 
