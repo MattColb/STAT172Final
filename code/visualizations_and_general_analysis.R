@@ -52,7 +52,6 @@ ggplot(cps_data) +
 ggsave("./figures/fsstmp_household_elderly.png", width=8, height=5)
 
 
-
 ggplot(data=cps_data) +
   geom_histogram(aes(x=sum_of_food_insecurity, fill=has_elderly_fact), binwidth=1) + 
   labs(x="Number of food insecurity indicators", y="Count") +

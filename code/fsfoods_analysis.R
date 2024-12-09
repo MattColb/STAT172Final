@@ -385,7 +385,22 @@ ggplot(data = senior_data) +
   labs(title = "Predicted Seniors w/o Enough Food",
        fill = "Predicted number\nof Seniors w/o\nEnough Food")
 
-#Model-Specific Predictions for Analysis
+#Model-Specific Predictions and Plots for Analysis
+
+plotting_data <- cps_data_f %>% mutate(
+  sum_of_food_insecurity = FSFOODS + FSWROUTY + FSSTMPVALC_bin,
+  has_elderly_fact = as.factor(ifelse(elderly > 0, "Has elderly", "Doesn't have elderly"))
+)
+
+ggplot(plotting_data) + 
+  geom_bar(aes(x=as.factor(FSFOODS), fill=has_elderly_fact), position="fill") +
+  scale_fill_brewer("Elders in household", palette="Dark2") +
+  labs(y="Proportion of households", x="Do They Have Enough to Eat?") + 
+  ggtitle("Proportion of households with elderly people with enough to eat")+
+  title("Proportion of households with elderly people with enough to eat")+
+  scale_x_discrete(labels = c("0" = "No", "1" = "Yes"))
+ggsave("./figures/fsfoods_household_elderly.png", width=8, height=5)
+
 
 #Use specificity from AUC graph to measure model performance
 plot(lasso_rocCurve, print.thres=TRUE, print.auc=TRUE)
@@ -405,4 +420,12 @@ lr_lasso_coefs <- coef(fsfoods_lasso_f1, s = "lambda.min") %>% as.matrix()
 #The elderly coefficient here is -0.109 - for every 1 elderly, the odds of
 #having enough decrease by 10.9%. EXPONENTIATE THIS
 #e^exp(-0.109)
-#write out your acs_predicted with only seniors into a csv then put it in the 
+#write out your acs_predicted with only seniors into a csv then put it in the
+
+#Percentage of households without enough
+weighted.mean(cps_data_f$FSFOODS >0, cps_data_f$weight)
+#0.2324573
+#Percentage of elderly households without enough
+elderly_cps <- subset(cps_data_f, cps_data_f$elderly > 0)
+weighted.mean(elderly_cps$FSFOODS >0, elderly_cps$weight)
+#0.1879351
