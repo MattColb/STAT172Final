@@ -70,7 +70,7 @@ cps_data <- cps %>% group_by(CPSID=as.factor(CPSID)) %>%
     donut = as.factor(ifelse(hhsize == (elderly+kids), 1, 0))
   ) %>% ungroup()
 
-#hhsize = 1, donut =1, elderly=1, faminc_cleaned=30000-34999
+#hhsize = 1, donut =1, elderly=1, faminc_cleaned=10000-12499
 
 cps_data <- cps_data %>% mutate(
   faminc_cleaned = case_when(

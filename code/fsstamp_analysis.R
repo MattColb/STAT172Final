@@ -443,7 +443,7 @@ ggplot(data = map_data) +
 ggsave("figures/propotion_of_seniors_predicted.png", width=6, height=5)
 
 #Load in Senior Data
-senior_data <- read.csv("./data/iowa_seniors_by_puma.csv")
+senior_data <- read.csv("./data/total_iowa_seniors_by_puma.csv")
 
 senior_data <- senior_data %>% mutate("PUMA" = as.character(GEOID))
 
