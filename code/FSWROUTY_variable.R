@@ -297,8 +297,6 @@ ridge_rocCurve <- roc(response = as.factor(test_preds$FSWROUTY_bin),
 
 plot(ridge_rocCurve, print.thres=TRUE, print.auc=TRUE)
 
-
-
 ########## COMBINE ROC CURVE ################
 
 #make data frame of MLE ROC info
@@ -361,69 +359,6 @@ ggplot() +
   labs(x = "1 - Specificity", y = "Sensitivity", color = "Model") +
   theme_minimal()
 
-source("./code/clean_acs.R")
-acs_reduced_test = acs_data %>% 
-   select(x_vars) 
- 
-acs_test_data <- model.matrix(~., data=acs_reduced_test)[,-1]
-fswrouty_predictions <- predict(lasso_model, acs_test_data, type="response")[,1]
-# Check the first few predictions
-head(fswrouty_predictions)
-
-acs_predicted <- acs_data %>% mutate(
-    fswrouty_probs = fswrouty_predictions
-)
-
-acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
-
- #How does this adjust with the weights
-summary_by_PUMA <- acs_predicted_only_seniors %>% group_by(PUMA = as.factor(PUMA)) %>% 
-   summarise(
-     sample_size = sum(hhsize),
-     proportion_on_assistance = weighted.mean(fswrouty_probs, weight),
-     only_senior = sum(ifelse(elderly == hhsize, 1, 0)),
-     has_senior = sum(ifelse(elderly > 0, 1, 0))
-   ) %>% as.data.frame() %>% arrange(desc(proportion_on_assistance))
-#https://www.geoplatform.gov/metadata/258db7ce-2581-4488-bb5e-e387b6119c7a
-sf_data <- st_read("./data/tl_2023_19_puma20/tl_2023_19_puma20.shp")
-
-colnames(sf_data)[colnames(sf_data) == "GEOID20"] = "PUMA"
- 
-map_data <- sf_data %>%
- left_join(summary_by_PUMA, by = "PUMA")
- 
-#Proportion of seniors that are on SNAP/Food Stamps
-ggplot(data = map_data) +
-   geom_sf(aes(fill = proportion_on_assistance)) +
-   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
-   theme_minimal() +
-   labs(title = "Proportion of Households",
-        fill = "Proportion on\nFood Anxiety")
-#Load in Senior Data
-senior_data <- read.csv("./data/iowa_seniors_by_puma.csv")
- 
-senior_data <- senior_data %>% mutate("PUMA" = as.character(GEOID))
- 
-senior_data <- map_data %>% left_join(senior_data, by="PUMA")
- 
-senior_data <- senior_data %>% mutate(
-   seniors_with_fswrouty = floor(proportion_on_assistance*senior_population)) 
-
-ggplot(data = senior_data) +
-   geom_sf(aes(fill = senior_population)) +
-   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
-   theme_minimal() +
-   labs(title = "Total Population of Seniors by PUMA",
-        fill = "Population of\nSeniors")
- 
-#Predicted number of seniors on SNAP
-ggplot(data = senior_data) +
-   geom_sf(aes(fill = seniors_with_fswrouty)) +
-   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
-   theme_minimal() +
-   labs(title = "Predicted Seniors w Food Anxiety by PUMA",
-        fill = "Predicted number\nof Seniors with\nFood Anxiety")
-
 ##################################################################
 ############# ACS ##############
 
@@ -446,7 +381,9 @@ acs_predicted <- acs_data %>% mutate(
 
 acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
 
+# percentage of senior having food anxiety
 weighted.mean(acs_predicted_only_seniors$fswrouty_probs, acs_predicted_only_seniors$weight)
+
 
 #How does this adjust with the weights
 summary_by_PUMA <- acs_predicted_only_seniors %>% group_by(PUMA = as.factor(PUMA)) %>% 
@@ -458,41 +395,6 @@ summary_by_PUMA <- acs_predicted_only_seniors %>% group_by(PUMA = as.factor(PUMA
     one_senior = sum(ifelse(elderly == hhsize & hhsize == 1, 1, 0)) #only 1 senior in the house
   ) %>% as.data.frame() %>% arrange(desc(proportion_on_assistance))
 
-
-total_sample_size <- nrow(acs_data)
-elderly_summary <- data.frame(
-  Category = c("Households with seniors",
-               "Households with seniors",
-               "Households with only seniors",
-               "Households with only seniors",
-               "Households with only one seniors",
-               "Households with only one seniors"),
-  Count = c(
-    sum(summary_by_PUMA$has_senior),
-    total_sample_size - sum(summary_by_PUMA$has_senior),
-    sum(summary_by_PUMA$only_senior),
-    total_sample_size - sum(summary_by_PUMA$only_senior),
-    sum(summary_by_PUMA$one_senior),
-    total_sample_size - sum(summary_by_PUMA$one_senior)
-),
-  Type = c("Senior", "Remaining")
-)
-
-# Create the stacked bar chart
-ggplot(elderly_summary, aes(x = Category, y = Count, fill = Type)) +
-  geom_bar(stat = "identity", position = "stack") +
-  coord_flip() +
-  labs(
-    title = "Household Composition with Senior Members",
-    x = "Category",
-    y = "Sample Size",
-    fill = "Type"
-  ) +
-  scale_fill_brewer(palette = "Dark2") +
-  theme_minimal()
-
-
-
 #https://www.geoplatform.gov/metadata/258db7ce-2581-4488-bb5e-e387b6119c7a
 sf_data <- st_read("./data/tl_2023_19_puma20/tl_2023_19_puma20.shp")
 
@@ -501,7 +403,7 @@ colnames(sf_data)[colnames(sf_data) == "GEOID20"] = "PUMA"
 map_data <- sf_data %>%
   left_join(summary_by_PUMA, by = "PUMA")
 
-#Proportion of seniors that are on SNAP/Food Stamps
+#Proportion of seniors that have food anxiety
 ggplot(data = map_data) +
   geom_sf(aes(fill = proportion_on_assistance)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
@@ -534,4 +436,130 @@ ggplot(data = senior_data) +
   theme_minimal() +
   labs(title = "Predicted Seniors w Food Anxiety by PUMA",
        fill = "Predicted number\nof Seniors\nwith Food Anxiety")
+
+
+#-------- Prediction on Single Senior Household
+
+single_senior_data <- senior_data %>% mutate(
+  single_senior_with_fswrouty = floor(proportion_on_assistance*one_senior)
+) 
+
+ggplot(data = senior_data) +
+  geom_sf(aes(fill = one_senior)) +
+  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
+  theme_minimal() +
+  labs(title = "Total Population of Single-Senior Households by PUMA",
+       fill = "Single Senior\nHouseholds")
+
+#Predicted number of single senior household with food anxiety
+ggplot(data = single_senior_data) +
+  geom_sf(aes(fill = single_senior_with_fswrouty)) +
+  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
+  theme_minimal() +
+  labs(title = "Predicted Food Anxiety in Single-Senior Households by PUMA",
+       fill = "Predicted Single\nSenior w Food Anxiety")
+
+#------ Prediction on Only Seniors Household
+
+only_senior_data <- senior_data %>% mutate(
+  only_senior_with_fswrouty = floor(proportion_on_assistance*only_senior)
+) 
+
+ggplot(data = senior_data) +
+  geom_sf(aes(fill = only_senior)) +
+  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
+  theme_minimal() +
+  labs(title = "Total Population of ONLY-Senior Households by PUMA",
+       fill = "ONLY Senior\nHouseholds")
+
+# Predicted number of ONLY senior households with good anxiety
+ggplot(data = only_senior_data) +
+  geom_sf(aes(fill = only_senior_with_fswrouty)) +
+  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
+  theme_minimal() +
+  labs(title = "Predicted Food Anxiety in ONLY-Senior Households by PUMA",
+       fill = "Predicted ONLY\nSenior w Food Anxiety")
+
+
+#------ Slides Interpretation
+head(acs_predicted_only_seniors)
+weighted.mean(acs_predicted_only_seniors$fswrouty_probs, acs_predicted_only_seniors$weight)
+# 0.4790557, this is the overall prop of seniors predicted to have food anxiety.
+
+coef(fswrouty_ridge, s="lambda.min") %>% as.matrix()
+#The elderly coefficient here is -0.20418350 for every 1 elderly, the odds of
+#having food anxiety decrease by 18.47%.
+
+##------Visualization
+
+### visualization of household with food anxiety
+
+# Calculate total households with seniors
+total_households_with_seniors <- sum(summary_by_PUMA$has_senior)
+
+# Calculate households with seniors having food anxiety
+households_with_seniors_anxiety <- model_data %>%
+  filter(FSWROUTY_bin == 1 & elderly > 0) %>%
+  nrow()
+
+# Proportion of households with seniors having food anxiety
+proportion_with_anxiety <- households_with_seniors_anxiety / total_households_with_seniors
+
+# Create a summary table for visualization
+anxiety_proportions <- data.frame(
+  Category = c("With Food Anxiety", "Without Food Anxiety"),
+  Count = c(
+    households_with_seniors_anxiety,
+    total_households_with_seniors - households_with_seniors_anxiety
+  ),
+  Proportion = c(
+    proportion_with_anxiety,
+    1 - proportion_with_anxiety
+  )
+)
+
+# Visualization
+ggplot(anxiety_proportions, aes(x = Category, y = Proportion, fill = Category)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Proportion of Households with Seniors Having Food Anxiety",
+    x = "Household Type",
+    y = "Proportion",
+    fill = "Category"
+  ) +
+  scale_fill_brewer(palette = "Dark2") +
+  theme_minimal()
+
+
+### stacked bar visualization of different senior groups
+total_sample_size <- nrow(acs_data)
+elderly_summary <- data.frame(
+  Category = c("Households with seniors",
+               "Households with seniors",
+               "Households with only seniors",
+               "Households with only seniors",
+               "Households with only one seniors",
+               "Households with only one seniors"),
+  Count = c(
+    sum(summary_by_PUMA$has_senior),
+    total_sample_size - sum(summary_by_PUMA$has_senior),
+    sum(summary_by_PUMA$only_senior),
+    total_sample_size - sum(summary_by_PUMA$only_senior),
+    sum(summary_by_PUMA$one_senior),
+    total_sample_size - sum(summary_by_PUMA$one_senior)
+  ),
+  Type = c("Senior", "Remaining")
+)
+
+ggplot(elderly_summary, aes(x = Category, y = Count, fill = Type)) +
+  geom_bar(stat = "identity", position = "stack") +
+  coord_flip() +
+  labs(
+    title = "Household Composition with Senior Members",
+    x = "Category",
+    y = "Sample Size",
+    fill = "Type"
+  ) +
+  scale_fill_brewer(palette = "Dark2") +
+  theme_minimal()
 
