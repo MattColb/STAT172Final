@@ -398,7 +398,7 @@ ggplot(plotting_data) +
   labs(y="Proportion of households", x="Do They Have Enough to Eat?") + 
   ggtitle("Proportion of households with elderly people with enough to eat")+
   title("Proportion of households with elderly people with enough to eat")+
-  scale_x_discrete(labels = c("0" = "No", "1" = "Yes"))
+  scale_x_discrete(labels = c("0" = "Yes", "1" = "No"))
 ggsave("./figures/fsfoods_household_elderly.png", width=8, height=5)
 
 
