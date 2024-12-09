@@ -346,7 +346,7 @@ colnames(sf_data)[colnames(sf_data) == "GEOID20"] = "PUMA"
 
 map_data <- sf_data %>%
   left_join(summary_by_PUMA, by = "PUMA")
-
+map_data$NAMELSAD20
 #proportion of GENERAL households without enough food
 ggplot(data = map_data) +
   geom_sf(aes(fill = proportion_on_assistance)) +
@@ -428,3 +428,25 @@ weighted.mean(cps_data_f$FSFOODS >0, cps_data_f$weight)
 elderly_cps <- subset(cps_data_f, cps_data_f$elderly > 0)
 weighted.mean(elderly_cps$FSFOODS >0, elderly_cps$weight)
 #0.1879351
+
+#Prediction on a sample individual
+example_pred = predict(fsfoods_lasso_f1, fsfoods.x.test, type = "response")[,1],
+fsfoods.x.test <- model.matrix(FSFOODS~hhsize + married + education + elderly +
+                                 kids + black + hispanic + female+ faminc_cleaned + donut,
+                               data = test.df)[,-1]
+fsfoods.y.test <- test.df$FSFOODS %>% as.vector()
+
+#Predicting a specific individual:
+#Coefficients
+#black                        0.19681189*0
+#elderly                     -0.10972093
+#female                       0.17185938*0
+#married                     -0.17834537*0
+#education                   -0.28476890*0
+#faminc_cleaned10000-12499    1.06139167
+#donut1                      -0.41141270
+
+
+-0.10972093+1.06139167-0.41141270 #0.540258
+exp(0.540258)/ (1+exp(0.540258)) #0.63187 
+
