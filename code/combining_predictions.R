@@ -68,6 +68,8 @@ senior_data <- senior_data %>%
     average_rank = (rank_fsstmp + rank_fsfoods + rank_fswrouty)/3
   )
 
+senior_data[is.na(senior_data$senior_population),"average_rank"] <- NA
+
 ggplot(data = senior_data) +
   geom_sf(aes(fill = average_rank)) +
   scale_fill_viridis_c(option = "plasma", direction=-1) +  # Adjust color palette as needed
