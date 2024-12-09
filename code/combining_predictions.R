@@ -43,6 +43,15 @@ colnames(sf_data)[colnames(sf_data) == "GEOID20"] = "PUMA"
 map_data <- sf_data %>%
   left_join(summary_by_PUMA, by = "PUMA")
 
+fsfoods_one_senior <- read.csv("./data/_.csv")
+
+fsfoods_one_senior <- fsfoods_one_senior %>% select(
+  "PUMA", "predictive_column"
+)
+
+map_data <- map_data %>% left_join(fsfoods_one_senior, by="PUMA")
+
+
 
 senior_data <- read.csv("./data/iowa_seniors_by_puma.csv")
 
