@@ -429,13 +429,6 @@ elderly_cps <- subset(cps_data_f, cps_data_f$elderly > 0)
 weighted.mean(elderly_cps$FSFOODS >0, elderly_cps$weight)
 #0.1879351
 
-#Prediction on a sample individual
-example_pred = predict(fsfoods_lasso_f1, fsfoods.x.test, type = "response")[,1],
-fsfoods.x.test <- model.matrix(FSFOODS~hhsize + married + education + elderly +
-                                 kids + black + hispanic + female+ faminc_cleaned + donut,
-                               data = test.df)[,-1]
-fsfoods.y.test <- test.df$FSFOODS %>% as.vector()
-
 #Predicting a specific individual:
 #Coefficients
 #black                        0.19681189*0
