@@ -310,7 +310,7 @@ ggplot() +
 
 #Then, compare performance on the ACS data suing lasso: this is our best model
 #with an AUC of 0.729.
-#let's get the lasso pi star
+#Get the lasso pi star
 lasso_fsfoods_pi_star <- coords(lasso_rocCurve, "best", ref="threshold")$threshold[1]
 
 acs_reduced_test = acs_data %>% 
@@ -330,7 +330,7 @@ acs_predicted <- acs_data %>% mutate(
 )
 
 #BASIC PREDICTION WITHOUT SENIORS
-#summary, not using weighted mean
+#summary using weighted mean
 summary_by_PUMA <- acs_predicted %>% group_by(PUMA = as.factor(PUMA)) %>% 
   summarise(
     sample_size = sum(hhsize),
@@ -358,7 +358,7 @@ ggplot(data = map_data) +
 #Load in Senior Data
 acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
 
-#write to file for further analysis
+#write to csv file for further analysis
 write.csv(acs_predicted_only_seniors, "./data/fsfoods_prediction.csv")
 
 senior_data <- read.csv("./data/iowa_seniors_by_puma.csv")
@@ -418,13 +418,12 @@ weighted.mean(acs_predicted_only_seniors$fsfoods_prop_preds, acs_predicted_only_
 
 lr_lasso_coefs <- coef(fsfoods_lasso_f1, s = "lambda.min") %>% as.matrix()
 #The elderly coefficient here is -0.109 - for every 1 elderly, the odds of
-#having enough decrease by 10.9%. EXPONENTIATE THIS
-#e^exp(-0.109)
-#write out your acs_predicted with only seniors into a csv then put it in the
+#having enough change by a factor of exp(-0.109) = 0.8967, or about an 11 percent decrease
 
 #Percentage of households without enough
 weighted.mean(cps_data_f$FSFOODS >0, cps_data_f$weight)
 #0.2324573
+
 #Percentage of elderly households without enough
 elderly_cps <- subset(cps_data_f, cps_data_f$elderly > 0)
 weighted.mean(elderly_cps$FSFOODS >0, elderly_cps$weight)
