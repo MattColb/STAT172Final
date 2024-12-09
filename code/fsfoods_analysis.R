@@ -361,7 +361,7 @@ acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
 #write to csv file for further analysis
 write.csv(acs_predicted_only_seniors, "./data/fsfoods_prediction.csv")
 
-senior_data <- read.csv("./data/iowa_seniors_by_puma.csv")
+senior_data <- read.csv("./data/total_iowa_seniors_by_puma.csv")
 
 senior_data <- senior_data %>% mutate("PUMA" = as.character(GEOID))
 
