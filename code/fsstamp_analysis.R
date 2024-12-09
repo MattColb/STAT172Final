@@ -406,6 +406,8 @@ acs_predicted <- acs_data %>% mutate(
 
 acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
 
+write.csv(acs_predicted_only_seniors, "./data/fsstmp_prediction.csv")
+
 #What percentage of Iowa is on SNAP/FSSTMP
 weighted.mean(acs_predicted_only_seniors$fsstmp_probabilities, acs_predicted_only_seniors$weight)
 
@@ -445,8 +447,6 @@ senior_data <- map_data %>% left_join(senior_data, by="PUMA")
 senior_data <- senior_data %>% mutate(
   seniors_on_fsstmp = floor(proportion_on_assistance*senior_population)
 ) 
-
-test_data <- senior_data[senior_data$PUMA == 1901400,]
 
 ggplot(data = senior_data) +
   geom_sf(aes(fill = senior_population)) +
