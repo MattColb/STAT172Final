@@ -438,7 +438,7 @@ ggplot(data = senior_data) +
        fill = "Predicted number\nof Seniors\nwith Food Anxiety")
 
 
-#-------- Prediction on Single Senior Household
+#-------- Prediction on Single Senior Household 
 
 single_senior_data <- senior_data %>% mutate(
   single_senior_with_fswrouty = floor(proportion_on_assistance*one_senior)
