@@ -216,6 +216,11 @@ plot(ridge_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #AUC = .888 (.802,
 
 ridge_fsstmp_pi_star <- coords(ridge_fsstmp_rocCurve, "best", ref="threshold")$threshold[1]
 
+#Predicting for a white, elderly, male, who lives alone, makes $11,000 a year
+#donut, elderly, hhsize, intercept, faminc
+#odds <- exp(-.28568 -.07412 + 0.15556578 - 1.69023936 + 0.77745406)
+#prob <- odds/(odds+1)
+
 #########################
 #     Random Forest     #
 #########################

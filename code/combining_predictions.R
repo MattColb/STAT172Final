@@ -43,11 +43,13 @@ colnames(sf_data)[colnames(sf_data) == "GEOID20"] = "PUMA"
 map_data <- sf_data %>%
   left_join(summary_by_PUMA, by = "PUMA")
 
-fsfoods_one_senior <- read.csv("./data/_.csv")
+fsfoods_one_senior <- read.csv("./data/single_senior_household.csv")
 
 fsfoods_one_senior <- fsfoods_one_senior %>% select(
-  "PUMA", "predictive_column"
+  "PUMA", "single_senior_with_fswrouty"
 )
+
+fsfoods_one_senior["PUMA"] = as.character(fsfoods_one_senior$PUMA)
 
 map_data <- map_data %>% left_join(fsfoods_one_senior, by="PUMA")
 
@@ -69,7 +71,7 @@ senior_data <- senior_data %>%
   mutate(
     rank_fsstmp = rank(-fsstmp_num_seniors),
     rank_fsfoods = rank(-fsfoods_num_seniors),
-    rank_fswrouty = rank(-fswrouty_num_seniors)
+    rank_fswrouty = rank(-single_senior_with_fswrouty)
   )
 
 senior_data <- senior_data %>% 

@@ -444,6 +444,11 @@ single_senior_data <- senior_data %>% mutate(
   single_senior_with_fswrouty = floor(proportion_on_assistance*one_senior)
 ) 
 
+save_data <- as.data.frame(single_senior_data) %>% 
+  select("PUMA", "single_senior_with_fswrouty")
+
+write.csv(save_data, "./data/single_senior_household.csv")
+
 ggplot(data = senior_data) +
   geom_sf(aes(fill = one_senior)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
