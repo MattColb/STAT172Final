@@ -412,7 +412,7 @@ ggplot(data = map_data) +
        fill = "Proportion on\nFood Anxiety")
 
 #Load in Senior Data
-senior_data <- read.csv("./data/iowa_seniors_by_puma.csv")
+senior_data <- read.csv("./data/total_iowa_seniors_by_puma.csv")
 
 senior_data <- senior_data %>% mutate("PUMA" = as.character(GEOID))
 
