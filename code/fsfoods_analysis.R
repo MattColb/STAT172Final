@@ -356,10 +356,10 @@ ggplot(data = map_data) +
        fill = "Proportion without\nEnough Food")
 
 #Load in Senior Data
-acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
+fsfood_acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
 
 #write to csv file for further analysis
-write.csv(acs_predicted_only_seniors, "./data/fsfoods_prediction.csv")
+write.csv(fsfood_acs_predicted_only_seniors, "./data/fsfoods_prediction.csv")
 
 senior_data <- read.csv("./data/total_iowa_seniors_by_puma.csv")
 
@@ -412,8 +412,8 @@ head(acs_predicted$fsfoods_prop_preds)
 weighted.mean(acs_predicted$fsfoods_prop_preds, acs_predicted$weight)
 #0.1564382, this is the overall proportion of the state predicted to be without enough food.
 
-head(acs_predicted_only_seniors)
-weighted.mean(acs_predicted_only_seniors$fsfoods_prop_preds, acs_predicted_only_seniors$weight)
+head(fsfood_acs_predicted_only_seniors)
+weighted.mean(fsfood_acs_predicted_only_seniors$fsfoods_prop_preds, fsfood_acs_predicted_only_seniors$weight)
 #0.09212924, this is the overall prop of seniors predicted to be w/o enough food.
 
 lr_lasso_coefs <- coef(fsfoods_lasso_f1, s = "lambda.min") %>% as.matrix()

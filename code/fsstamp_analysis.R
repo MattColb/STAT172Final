@@ -21,7 +21,7 @@ source("./code/clean_acs.R")
 #These terms would often help the weaker models, such as taking a
 #.5 AUC of a ctree up to a .6, but often saw small decreases in our
 #models that were the best. Ridge and lasso, for example,
-#generally saw their AUCs decrease by about .05=.
+#generally saw their AUCs decrease by about .05.
 include_squared_interaction = FALSE
 
 cps_data <- as.data.frame(cps_data)
@@ -30,12 +30,11 @@ cps_data <- cps_data %>% mutate(
   FSSTMPVALC_bin_fact = as.factor(FSSTMPVALC_bin_char)
 )
 
-#(specificity, sensitivity)
-
 ###############################
 #       Train Test Split      #
 ###############################
 
+#Set seed and break into training and testing
 RNGkind(sample.kind = "default")
 set.seed(1342141)
 train.idx <- sample(x=1:nrow(cps_data), size=.7*nrow(cps_data))
@@ -43,22 +42,17 @@ train.df <- cps_data[train.idx,]
 test.df <- cps_data[-train.idx,]
 test.df.preds <- test.df
 
+#Make list of x and y variables that we can use later.
+#These are used in a lot of places, so easy to include/take out a variable
 x_vars = c("hhsize", "female", "hispanic", "black", "faminc_cleaned",
            "kids", "elderly", "education", "married", "donut")
 y_var = c("FSSTMPVALC_bin")
-
-###########################
-#   Food Stamp Analysis   #
-###########################
-
-#Create more visualizations
-#Choose a model to use
-#Combine FSSTMP and WROUTY to see if there are big differences
 
 ###########################################
 ##  Adding all interaction/squared terms ##
 ###########################################
 
+#Subset to only include relevant columns
 reduced_train = train.df %>% 
   select(c(x_vars, y_var))
 
@@ -89,6 +83,7 @@ if(include_squared_interaction){
 ###########################
 #   Train Test Split      #
 ###########################
+#Break the train test into x and y model matrices
 FSSTMP.x.train <- model.matrix(FSSTMPVALC_bin ~ .
                                , data=reduced_train)[,-1]
 FSSTMP.x.test <- model.matrix(FSSTMPVALC_bin ~ .
@@ -121,7 +116,8 @@ lr_mle_fsstmp_rocCurve <- roc(
   predictor= test.df.preds$lr_mle_fsstmp_preds,
   levels=c("0","1"))
 
-plot(lr_mle_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #AUC = .624 (.949, .641)
+plot(lr_mle_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) 
+#AUC = .641 (.949, .333)
 
 lr_mle_fsstmp_pi_star <- coords(lr_mle_fsstmp_rocCurve, "best", ref="threshold")$threshold[1]
 
@@ -135,10 +131,6 @@ lr_firths_fsstmp <- logistf(FSSTMPVALC_bin ~ .,
 
 summary(lr_firths_fsstmp)
 
-#We are 95% confident that for every elderly person added to the household
-#the odds that they are on food stamps decrease by between
-#sum
-
 lr_firths_fsstmp_beta <- lr_firths_fsstmp %>% coef()
 
 test.df.preds <- test.df.preds %>% mutate(
@@ -150,7 +142,8 @@ lr_firths_fsstmp_rocCurve <- roc(
   predictor= test.df.preds$lr_firths_fsstmp_preds,
   levels=c("0","1"))
 
-plot(lr_firths_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #AUC = .887 (.775, .863)
+plot(lr_firths_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) 
+#AUC = .887 (.775, .863)
 
 lr_firths_fsstmp_pi_star <- coords(lr_firths_fsstmp_rocCurve, "best", ref="threshold")$threshold[1]
 
@@ -167,7 +160,7 @@ best_lasso_lambda_fsstmp <- lr_lasso_fsstmp_cv$lambda.min
 
 lr_lasso_coefs_fsstmp <- coef(lr_lasso_fsstmp_cv, s="lambda.min") %>% as.matrix()
 
-lr_lasso_coefs_fsstmp #hispanic and hhsize both went to 0
+lr_lasso_coefs_fsstmp
 
 lr_lasso_fsstmp <- glmnet(FSSTMP.x.train, FSSTMP.y.train, family=binomial(link="logit"), 
                           alpha=1, lambda = best_lasso_lambda_fsstmp, weights=train.weights)
@@ -180,7 +173,8 @@ lasso_fsstmp_rocCurve <- roc(response = as.factor(test.df.preds$FSSTMPVALC_bin),
                              predictor =test.df.preds$lasso_fsstmp_preds,
                              levels=c("0", "1"))
 
-plot(lasso_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #AUC = .887 (.775, .863)
+plot(lasso_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) 
+#AUC = .887 (.775, .863)
 
 lasso_fsstmp_pi_star <- coords(lasso_fsstmp_rocCurve, "best", ref="threshold")$threshold[1]
 
@@ -198,6 +192,13 @@ best_ridge_lambda_fsstmp <- lr_lasso_fsstmp_cv$lambda.min
 lr_ridge_coefs_fsstmp <- coef(lr_ridge_fsstmp_cv, s="lambda.min") %>% as.matrix()
 
 lr_ridge_coefs_fsstmp
+#For an elderly, white, male, graduated high school, lives alone, makes 11,000 yearly
+#odds <- exp(-.28568 -.07412 + 0.15556578 - 1.69023936 + 0.77745406)
+#prob <- odds/(odds+1)
+#prob = .2466
+
+example <- data.frame(hhsize=c(1), female=c(0), hispanic=c(0), black=c(0), faminc_cleaned=c("10000-12499"),
+           kids=c(0), elderly=c(1), education=c(0), married=c(0), donut=c(as.factor(1)))
 
 lr_ridge_fsstmp <- glmnet(FSSTMP.x.train, FSSTMP.y.train, family=binomial(link="logit"), 
                           alpha=0, lambda = best_ridge_lambda_fsstmp, weights=train.weights)
@@ -216,10 +217,7 @@ plot(ridge_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #AUC = .888 (.802,
 
 ridge_fsstmp_pi_star <- coords(ridge_fsstmp_rocCurve, "best", ref="threshold")$threshold[1]
 
-#Predicting for a white, elderly, male, who lives alone, makes $11,000 a year
-#donut, elderly, hhsize, intercept, faminc
-#odds <- exp(-.28568 -.07412 + 0.15556578 - 1.69023936 + 0.77745406)
-#prob <- odds/(odds+1)
+
 
 #########################
 #     Random Forest     #
@@ -278,6 +276,7 @@ test.df.preds <- test.df.preds %>% mutate(
   rf_fsstmp_preds = as.factor(ifelse(pi_hat > rf_fsstmp_pi_star, "Yes", "No"))
 )
 
+#Look at variable importance, but unlikely to be helpful
 varImpPlot(final_forest, type=1)
 
 rf_vi <- as.data.frame(varImpPlot(final_forest, type=1))
@@ -373,7 +372,7 @@ ggplot() +
 ################
 # LOAD IN ACS  #
 ################
-
+#Transform acs in the same way that we did for CPS to make the data identitcal.
 acs_reduced_test = acs_data %>% 
   select(x_vars) 
 
@@ -401,23 +400,25 @@ acs_test_data <- model.matrix(~., data=acs_reduced_test)[,-1]
 ## MAKE PREDICTIONS ON ACS DATA ##
 ##################################
 
-#We chose the lasso model to make our predictions because it had the highest 
+#We chose the ridge model to make our predictions because it had the highest 
 #specificity, which means that we can be more confident that it gets to people who 
+#All of our AUCs for ridge, lasso, and firths were very close
 fsstmp_predictions <- predict(lr_ridge_fsstmp, acs_test_data, type="response")[,1]
 
 acs_predicted <- acs_data %>% mutate(
   fsstmp_probabilities = fsstmp_predictions
 )
 
-acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
+fsstmp_acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
 
-write.csv(acs_predicted_only_seniors, "./data/fsstmp_prediction.csv")
+#Write it out to be used for combining all data. 
+#Just because model creation takes so long that we didn't want to have to rerun every time
+write.csv(fsstmp_acs_predicted_only_seniors, "./data/fsstmp_prediction.csv")
 
-#What percentage of Iowa is on SNAP/FSSTMP
-weighted.mean(acs_predicted_only_seniors$fsstmp_probabilities, acs_predicted_only_seniors$weight)
+#What percentage of Iowa Seniors are on SNAP/FSSTMP
+weighted.mean(fsstmp_acs_predicted_only_seniors$fsstmp_probabilities, fsstmp_acs_predicted_only_seniors$weight)
 
-#How does this adjust with the weights
-summary_by_PUMA <- acs_predicted_only_seniors %>% group_by(PUMA = as.factor(PUMA)) %>% 
+summary_by_PUMA <- fsstmp_acs_predicted_only_seniors %>% group_by(PUMA = as.factor(PUMA)) %>% 
   summarise(
     sample_size = sum(hhsize),
     proportion_on_assistance = weighted.mean(fsstmp_probabilities, weight),
@@ -426,6 +427,7 @@ summary_by_PUMA <- acs_predicted_only_seniors %>% group_by(PUMA = as.factor(PUMA
   ) %>% as.data.frame() %>% arrange(desc(proportion_on_assistance))
 
 #https://www.geoplatform.gov/metadata/258db7ce-2581-4488-bb5e-e387b6119c7a
+#Loading in the Iowa PUMA shape data
 sf_data <- st_read("./data/tl_2023_19_puma20/tl_2023_19_puma20.shp")
 
 colnames(sf_data)[colnames(sf_data) == "GEOID20"] = "PUMA"
@@ -436,11 +438,11 @@ map_data <- sf_data %>%
 #Proportion of seniors that are on SNAP/Food Stamps
 ggplot(data = map_data) +
   geom_sf(aes(fill = proportion_on_assistance)) +
-  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
+  scale_fill_viridis_c(option = "plasma") + 
   theme_minimal() +
   labs(title = "Proportion of Households with Seniors on SNAP/Food Stamps",
        fill = "Proportion on\nFood Stamps/SNAP")
-ggsave("figures/propotion_of_seniors_predicted.png", width=6, height=5)
+ggsave("figures/propotion_of_seniors_predicted_fsstmp.png", width=6, height=5)
 
 #Load in Senior Data
 senior_data <- read.csv("./data/total_iowa_seniors_by_puma.csv")
@@ -453,19 +455,20 @@ senior_data <- senior_data %>% mutate(
   seniors_on_fsstmp = floor(proportion_on_assistance*senior_population)
 ) 
 
+#Number of seniors in Iowa by PUMA
 ggplot(data = senior_data) +
   geom_sf(aes(fill = senior_population)) +
-  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
+  scale_fill_viridis_c(option = "plasma") + 
   theme_minimal() +
   labs(title = "Total Population of Seniors by PUMA",
        fill = "Population of\nSeniors")
 ggsave("figures/number_of_seniors_by_puma.png", width=6, height=5)
 
-#Predicted number of seniors on SNAP
+#Predicted number of seniors on SNAP by PUMA
 ggplot(data = senior_data) +
   geom_sf(aes(fill = seniors_on_fsstmp)) +
-  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
+  scale_fill_viridis_c(option = "plasma") + 
   theme_minimal() +
   labs(title = "Predicted Number of Seniors on SNAP by PUMA",
        fill = "Predicted number\nof Seniors\non SNAP")
-ggsave("figures/number_on_seniors_fsstmp.png", width=6, height=5)
+ggsave("figures/number_of_seniors_on_fsstmp.png", width=6, height=5)

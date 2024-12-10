@@ -18,12 +18,6 @@ head(cps[,c("CPSID","PERNUM", "FSSTATUS", "FSSTATUSMD", "RACE","EDUC")]) %>% kab
 
 summary(cps)
 
-#map_chr(cps, ~attr(.x, "label")) %>% 
-#  bind_cols(names=names(cps), question = .) %>%
-#  rownames_to_column(var="Variable Name") %>% kable
-
-#Using lower bound estimates for FAMINC
-
 cps <- cps %>% mutate(SEX = SEX-1,
                       CHILD = ifelse(AGE < 18, 1, 0),
                       ELDERLY = ifelse(AGE > 59, 1, 0),
@@ -55,9 +49,6 @@ cps_data <- cps %>% group_by(CPSID=as.factor(CPSID)) %>%
     FSRAWSCRA = first(FSRAWSCRA),
     FSTOTXPNC = first(FSTOTXPNC),
     FSSTMPVALC = first(FSSTMPVALC),
-    #FSSTATUS = first(FSSTATUS),
-    
-    #FSTMPVALC, FSRAWSCRM, 
     
     female = sum(SEX),
     hispanic = sum(HISPANIC),
@@ -69,8 +60,6 @@ cps_data <- cps %>% group_by(CPSID=as.factor(CPSID)) %>%
     faminc = first(FAMINC),
     donut = as.factor(ifelse(hhsize == (elderly+kids), 1, 0))
   ) %>% ungroup()
-
-#hhsize = 1, donut =1, elderly=1, faminc_cleaned=10000-12499
 
 cps_data <- cps_data %>% mutate(
   faminc_cleaned = case_when(
@@ -94,31 +83,6 @@ cps_data <- cps_data %>% mutate(
   )
 )
 
-
-#faminc_cleaned = case_when(faminc == 843 ~ 150000,
-#                           faminc == 830 ~ 60000,
-#                           faminc == 100 ~ 0,
-#                           faminc == 730 ~ 35000,
-#                           faminc == 842 ~ 100000,
-#                           faminc == 300 ~ 7500,
-#                           faminc == 720 ~ 30000,
-#                           faminc == 740 ~ 40000,
-#                           faminc == 710 ~ 25000,
-#                           faminc == 841 ~ 75000,
-#                           faminc == 600 ~ 20000,
-#                           faminc == 500 ~ 15000,
-#                           faminc == 820 ~ 50000,
-#                           faminc == 430 ~ 10000,
-#                           faminc == 210 ~ 50000,
-#                           faminc == 470 ~ 12500,
-#                           TRUE ~ NA_real_)
-
-#100  210  300  430  470  500  600  710  720  730  740  820  830  841  842  843 
-#289   94  193  284  290  495  691  691  825  862 1467 1448 2094 2776 3325 3623 
-table(cps$FAMINC)
-summary(cps_data)
-#Non-included variables (Not in ACS):
-#EMPSTAT, DIFFANY, VETSTAT
 
 head(cps_data)
 sum(cps_data$hhsize)

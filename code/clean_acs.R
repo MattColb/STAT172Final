@@ -67,26 +67,3 @@ acs_data <- acs_data %>% mutate(
   )
 )
 
-#Not entirely sure that this is the way to go since they are samples
-#But maybe we can use the weights?
-data_by_PUMA <- acs_data %>% group_by(PUMA = as.factor(PUMA)) %>% 
-  summarize(
-    total_residents = sum(hhsize),
-    avg_hhsize = mean(hhsize),
-    total_female = sum(female),
-    avg_female = mean(female),
-    total_hispanic = sum(hispanic),
-    avg_hispanic = mean(hispanic),
-    total_black = sum(black),
-    avg_black = mean(black),
-    total_kids = sum(kids),
-    avg_kids = mean(kids),
-    total_elderly = sum(elderly),
-    avg_elderly = mean(elderly),
-    total_education = sum(education),
-    avg_education = mean(education),
-    total_married = sum(married),
-    avg_married = mean(married),
-  )
-
-# hi
