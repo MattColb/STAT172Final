@@ -18,19 +18,14 @@ library(tidyverse)
 
 fsstmp <- read.csv("./data/fsstmp_prediction.csv")
 fsfoods <- read.csv("./data/fsfoods_prediction.csv")
-fsfwrouty_one_senior <- read.csv("./data/single_senior_household.csv")
+fswrouty_one_senior <- read.csv("./data/single_senior_household.csv")
 
 fswrouty_one_senior <- fswrouty_one_senior %>% select(
   "PUMA", "single_senior_with_fswrouty"
 )
 
-
-#Merge and rename
-merged <- fsstmp %>%  left_join(fswrouty, by="serialno") %>% 
-  select("serialno", "PUMA.x", "fswrouty_probs", "fsstmp_probabilities", "hhsize.x", "weight.x", "elderly.x")
-
-merged <- merged %>%  left_join(fsfoods, by="serialno") %>% 
-  select("serialno", "PUMA.x", "fswrouty_probs", "fsstmp_probabilities", "fsfoods_prop_preds",
+merged <- fsstmp %>%  left_join(fsfoods, by="serialno") %>% 
+  select("serialno", "PUMA.x", "fsstmp_probabilities", "fsfoods_prop_preds",
          "hhsize.x", "weight.x", "elderly.x")
 
 names(merged)[names(merged) == 'PUMA.x'] <- 'PUMA'
@@ -43,8 +38,7 @@ summary_by_PUMA <- merged %>% group_by(PUMA = as.factor(PUMA)) %>%
   summarise(
     sample_size = sum(hhsize),
     fsstmp = weighted.mean(fsstmp_probabilities, weight),
-    fsfoods = weighted.mean(fsfoods_prop_preds, weight),
-    fswrouty = weighted.mean(fswrouty_probs, weight),
+    fsfoods = weighted.mean(fsfoods_prop_preds, weight)
   ) %>% as.data.frame()
 
 sf_data <- st_read("./data/tl_2023_19_puma20/tl_2023_19_puma20.shp")

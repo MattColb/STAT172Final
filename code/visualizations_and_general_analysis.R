@@ -15,6 +15,11 @@ library(randomForest)
 source("./code/clean_cps.R")
 source("./code/clean_acs.R")
 
+######################
+# Y-Variable Overlap #
+######################
+
+
 table(cps_data$FSWROUTY, cps_data$FSSTMPVALC_bin)
 #With this table, we can see that a little over half
 #of people who are on food stamps are also worrying about 
@@ -35,11 +40,8 @@ table(cps_data$FSFOODS, cps_data$FSWROUTY)
 #or are able to eat the types of food that they enjoy
 #Even without worrying about being able to afford food.
 
-table(cps_data$FSFOODS, cps_data$FSWROUTY, cps_data$FSSTMPVALC_bin)
-#About 216 people experience all 3.
-
+#
 cps_data <- cps_data %>% mutate(
-  sum_of_food_insecurity = FSFOODS + FSWROUTY + FSSTMPVALC_bin,
   has_elderly_fact = as.factor(ifelse(elderly > 0, "Has elderly", "Doesn't have elderly"))
 )
 
@@ -52,7 +54,7 @@ ggplot(cps_data[!is.na(cps_data$FSWROUTY), ]) +
        x="Are they receiving SNAP benefits?", y="Proportion") +
   ggtitle("Proportion of people with food anxiety based on SNAP status") +
   scale_fill_brewer("Do they\nworry about food?", palette = "Dark2")
-ggsave("./figures/FSSTMP_FSWROUTY_ANALYSIS.png", width=7, height=7.5)
+ggsave("./figures/FSSTMP_FSWROUTY_OVERLAP_ANALYSIS.png", width=7, height=7.5)
 
 ggplot(cps_data[!is.na(cps_data$FSFOODS), ]) +
   geom_bar(aes(x=as.factor(FSSTMPVALC_bin_char), fill=
@@ -62,7 +64,7 @@ ggplot(cps_data[!is.na(cps_data$FSFOODS), ]) +
        x="Are they receiving SNAP benefits?", y="Proportion") +
   ggtitle("Proportion of people not getting preferred food based on SNAP status") +
   scale_fill_brewer("Do they\nget the food\nthey want?", palette = "Dark2")
-ggsave("./figures/FSSTMP_FSFOODS_ANALYSIS.png", width=7, height=7.5)
+ggsave("./figures/FSSTMP_FSFOODS_OVERLAP_ANALYSIS.png", width=7, height=7.5)
 
 ggplot(cps_data[!is.na(cps_data$FSFOODS) & !is.na(cps_data$FSWROUTY), ]) +
   geom_bar(aes(x=as.factor(ifelse(FSWROUTY==1, "Has food anxiety", "Doesn't have food anxiety")), fill=
@@ -72,7 +74,7 @@ ggplot(cps_data[!is.na(cps_data$FSFOODS) & !is.na(cps_data$FSWROUTY), ]) +
        x="Do they have food anxiety?", y="Proportion") +
   ggtitle("Proportion of people not getting preferred food based on food anxiety") +
   scale_fill_brewer("Do they\nget the food\nthey want?", palette = "Dark2")
-ggsave("./figures/FSWROUTY_FSFOODS_ANALYSIS.png", width=7, height=7.5)
+ggsave("./figures/FSWROUTY_FSFOODS_OVERLAP_ANALYSIS.png", width=7, height=7.5)
 
 #Look at the proportion of people that are on/not on SNAP that are seniors
 ggplot(cps_data) + 
@@ -83,18 +85,6 @@ ggplot(cps_data) +
   title("Proportion of households with elderly people on Food Stamps/SNAP")
 ggsave("./figures/fsstmp_household_elderly.png", width=8, height=5)
 
-<<<<<<< HEAD
-
-ggplot(data=cps_data) +
-  geom_histogram(aes(x=sum_of_food_insecurity, fill=has_elderly_fact), binwidth=1) + 
-  labs(x="Number of food insecurity indicators", y="Count") +
-  title("Total investigated food insecurity indicators") + 
-  ggtitle("Total investigated food insecurity indicators") +
-  scale_fill_brewer("Seniors in household", palette="Dark2")
-ggsave("./figures/food_insecurity_indicators")
-
-=======
->>>>>>> ef74e38d361b36563f5fb2baea50c3f96552e031
 #######################################
 #  Visualizing percentage of elderly  #
 #######################################
