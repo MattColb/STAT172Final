@@ -253,7 +253,6 @@ fswrouty_lasso <- cv.glmnet(x_train, y_train, family=binomial(link="logit"), alp
 plot(fswrouty_lasso)
 best_lambda_lasso <- fswrouty_lasso$lambda.min
 coef(fswrouty_lasso, s="lambda.min") %>% as.matrix()
-# cluster 2, 4, and 5 went to 0
 
 lasso_model <- glmnet(x_train, y_train, family=binomial(link="logit"), 
                       alpha = 1, 
@@ -412,7 +411,7 @@ ggplot(data = map_data) +
        fill = "Proportion on\nFood Anxiety")
 
 #Load in Senior Data
-senior_data <- read.csv("./data/iowa_seniors_by_puma.csv")
+senior_data <- read.csv("./data/total_iowa_seniors_by_puma.csv")
 
 senior_data <- senior_data %>% mutate("PUMA" = as.character(GEOID))
 
@@ -459,28 +458,6 @@ ggplot(data = single_senior_data) +
   labs(title = "Predicted Food Anxiety in Single-Senior Households by PUMA",
        fill = "Predicted Single\nSenior w Food Anxiety")
 
-#------ Prediction on Only Seniors Household
-
-only_senior_data <- senior_data %>% mutate(
-  only_senior_with_fswrouty = floor(proportion_on_assistance*only_senior)
-) 
-
-ggplot(data = senior_data) +
-  geom_sf(aes(fill = only_senior)) +
-  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
-  theme_minimal() +
-  labs(title = "Total Population of ONLY-Senior Households by PUMA",
-       fill = "ONLY Senior\nHouseholds")
-
-# Predicted number of ONLY senior households with good anxiety
-ggplot(data = only_senior_data) +
-  geom_sf(aes(fill = only_senior_with_fswrouty)) +
-  scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
-  theme_minimal() +
-  labs(title = "Predicted Food Anxiety in ONLY-Senior Households by PUMA",
-       fill = "Predicted ONLY\nSenior w Food Anxiety")
-
-
 #------ Slides Interpretation
 head(acs_predicted_only_seniors)
 weighted.mean(acs_predicted_only_seniors$fswrouty_probs, acs_predicted_only_seniors$weight)
@@ -490,7 +467,7 @@ coef(fswrouty_ridge, s="lambda.min") %>% as.matrix()
 #The elderly coefficient here is -0.20418350 for every 1 elderly, the odds of
 #having food anxiety decrease by 18.47%.
 
-##------Visualization
+########## VISUALIZATION ############
 
 ### visualization of household with food anxiety
 
@@ -562,4 +539,5 @@ ggplot(elderly_summary, aes(x = Category, y = Count, fill = Type)) +
   ) +
   scale_fill_brewer(palette = "Dark2") +
   theme_minimal()
+
 
