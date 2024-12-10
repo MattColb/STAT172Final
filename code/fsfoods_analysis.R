@@ -377,6 +377,7 @@ ggplot(data = senior_data) +
   labs(title = "Total Population of Seniors by PUMA",
        fill = "Population of\nSeniors")
 
+
 #Predicted number of SENIORS without enough food
 ggplot(data = senior_data) +
   geom_sf(aes(fill = seniors_with_fsfoods)) +
@@ -384,7 +385,7 @@ ggplot(data = senior_data) +
   theme_minimal() +
   labs(title = "Predicted Seniors w/o Enough Food",
        fill = "Predicted number\nof Seniors w/o\nEnough Food")
-
+ggsave("figures/preidcted_seniors_fsfoods.png")
 #Model-Specific Predictions and Plots for Analysis
 
 plotting_data <- cps_data_f %>% mutate(
