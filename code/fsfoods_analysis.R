@@ -354,6 +354,7 @@ ggplot(data = map_data) +
   theme_minimal() +
   labs(title = "Proportion of Households without Enough Food",
        fill = "Proportion without\nEnough Food")
+ggsave("figures/fsfoods_proportion_of_general_households.png", width=6, height=5)
 
 #Load in Senior Data
 fsfood_acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
@@ -385,7 +386,7 @@ ggplot(data = senior_data) +
   theme_minimal() +
   labs(title = "Predicted Seniors w/o Enough Food",
        fill = "Predicted number\nof Seniors w/o\nEnough Food")
-ggsave("figures/preidcted_seniors_fsfoods.png")
+ggsave("figures/preidcted_seniors_fsfoods.png", width=6, height=5)
 #Model-Specific Predictions and Plots for Analysis
 
 plotting_data <- cps_data_f %>% mutate(
