@@ -374,7 +374,7 @@ ggplot(data = senior_data) +
   theme_minimal() +
   labs(title = "Predicted Seniors w Food Anxiety by PUMA",
        fill = "Predicted number\nof Seniors\nwith Food Anxiety")
-ggsave("figures/proportion_of_seniors_with_food_anxiety.png", width=6, height=5)
+ggsave("figures/predicted_of_seniors_with_food_anxiety.png", width=6, height=5)
 
 
 ############# Prediction on Single Senior Household ###################

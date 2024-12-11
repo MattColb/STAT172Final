@@ -386,7 +386,7 @@ ggplot(data = senior_data) +
   theme_minimal() +
   labs(title = "Predicted Seniors w/o Enough Food",
        fill = "Predicted number\nof Seniors w/o\nEnough Food")
-ggsave("figures/preidcted_seniors_fsfoods.png", width=6, height=5)
+ggsave("figures/predicted_seniors_fsfoods.png", width=6, height=5)
 
 #----Model-Specific Predictions and Plots for Analysis----
 
