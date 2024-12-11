@@ -15,6 +15,8 @@ library(reshape2)
 library(randomForest)
 library(logistf)
 library(RColorBrewer)
+library(rpart)
+library(rpart.plot)
 
 source("code/clean_cps.R")
 
@@ -30,50 +32,11 @@ cps_data <- cps_data[!is.na(cps_data$FSWROUTY_binchar),]
 
 cps_data <- cps_data %>% mutate(FSWROUTY_bin = ifelse(FSWROUTY_binchar == "No", 0, 1))
 
-summary(cps_data)
-head(cps_data)
-
-############# CLUSTERING ##############
-
-# set up
-data_X <- cps_data[, c( "hhsize", "female", "hispanic", "black", 
-                       "kids", "elderly", "education", "married")]
-
-# standardize all predictor columns 
-data_stand <- apply(data_X, 2, function(x)(x - mean(x))/sd(x))
-
-# compute observation-observation distance (for hierachical clustering) 
-data_dist <- dist(data_stand, method = "euclidean")
-
-# first, let's use the average method to measure cluster-to-cluster similarity 
-data_clust <- hclust(data_dist, method = "average")
-
-# the height of a bar is distance between cluster centers 
-plot(data_clust, labels = cps_data$FSWROUTY, hang = -1)
-
-rect.hclust(data_clust, k = 3, border ="red")
-
-# Making sense of the clusters, obtaining "characterization" of clusters
-data_X$h_cluster <- as.factor(cutree(data_clust, k = 5))
-data_X_long <- melt(data_X, id.vars = c("h_cluster"))
-head(data_X_long)
-ggplot(data = data_X_long) +
-  geom_boxplot(aes(x = h_cluster, y = value, fill = h_cluster)) +
-  facet_wrap(~variable, scales= "free") + 
-  scale_fill_brewer("Cluster \nMembership", palette = "Dark2") +
-  ggtitle("Hierachical Clusters")
-
-# Cluster 1: small households, elderly or retired individuals living alone or with a spouse
-#           => might benefit us to look more into this cluster
-# Cluster 2: young black families
-# Cluster 3: large families with children 
-# Cluster 4: medium size Hispanic families
-#           => big family size with children and elderly  
-# Cluster 5: Outliers or Minimal Engagement
+# summary(cps_data)
 
 ############ Train Test Split ############
 
-# Combine cluster memberships with other features
+# only include certain variables
 model_data <- cps_data[, c("FSWROUTY_bin", "weight", "hhsize",  
                            "female", "hispanic", "black", "kids", "elderly",
                            "education", "married", "faminc_cleaned")]
@@ -85,12 +48,11 @@ train.idx <- sample(x=1:nrow(model_data), size=.7*nrow(model_data))
 train.df <- model_data[train.idx,]
 test.df <- model_data[-train.idx,]
 
-#################
-
+# only x variables
 x_vars = c("hhsize", "female", "hispanic", "black", "kids", "elderly",
            "education", "married", "faminc_cleaned")
 
-################ MLE #########################
+################ MLE Logistic Regression #########################
 
 fswrouty_mle <- glm(FSWROUTY_bin ~ hhsize + married + education + elderly + kids 
                     + black + hispanic + female + faminc_cleaned,
@@ -100,7 +62,7 @@ fswrouty_mle <- glm(FSWROUTY_bin ~ hhsize + married + education + elderly + kids
 
 summary(fswrouty_mle)
 
-#Since all variables are seen as significant because of complete separation
+#all variables are seen as significant because of complete separation
 test_preds <- test.df %>% 
   mutate(
     mle_fswrouty_prob = predict(fswrouty_mle, test.df , type="response")
@@ -113,7 +75,7 @@ mle_fswrouty_rocCurve <- roc(
 
 plot(mle_fswrouty_rocCurve, print.thres=TRUE, print.auc=TRUE) 
 
-################## Firth's Penalized Likelihood ###################
+################## FIRTH'S PENALIZED LIKELIHOOD ###################
 
 firths_fswrouty <- logistf(FSWROUTY_bin ~ hhsize + married + education + elderly +
                               kids + black + hispanic + female + faminc_cleaned,
@@ -136,13 +98,8 @@ firths_fswrouty_rocCurve <- roc(
 
 plot(firths_fswrouty_rocCurve, print.thres=TRUE, print.auc=TRUE) 
 
-firth_fswrouty_pi_hat <- coords(firths_fswrouty_rocCurve, "best", ref="threshold")$threshold[1]
-
-
 ############# RANDOM FOREST ###################
-x_vars <- c("hhsize", "female", "hispanic", "black", "faminc_cleaned",
-            "kids", "elderly", "education", "married")
-#Multiple mtry
+# Multiple mtry
 mtry = c(1:length(x_vars))
 keeps <- data.frame(m=rep(NA, length(mtry)),
                     OOB_err_rate = rep(NA, length(mtry)))
@@ -188,26 +145,13 @@ rf_rocCurve <- roc(response = test.df$FSWROUTY_bin,
 
 plot(rf_rocCurve, print.thres = TRUE, print.ouc = TRUE)
 
-auc(rf_rocCurve) 
-
-pi_star <- coords(rf_rocCurve, "best", ret="threshold")$threshold[1]
-
-test_preds <- test.df %>% mutate(
-  rf_preds = as.factor(ifelse(pi_hat > pi_star, "Yes", "No"))
-)
-
+# variable importance plot based on decrease in forest accuracy
 varImpPlot(rf_fswrouty, type=1)
-
 rf_vi <- as.data.frame(varImpPlot(rf_fswrouty, type=1))
-
 rf_vi$Variable <- rownames(rf_vi)
-
 rf_vi <- rf_vi %>% arrange(desc(MeanDecreaseAccuracy))
 
-################ Tree #####################
-library(rpart)
-library(rpart.plot)
-
+################ TREE #####################
 ctree <- rpart(FSWROUTY_bin ~ hhsize + married + education + elderly +
                  kids + black + hispanic + female + faminc_cleaned,
                data= train.df,
@@ -215,27 +159,26 @@ ctree <- rpart(FSWROUTY_bin ~ hhsize + married + education + elderly +
                method="class",
                control=rpart.control(cp=.0001, minsplit=1))
 
+# the optimal complexity parameter 
 optimalcp <- ctree$cptable[which.min(ctree$cptable[,"xerror"]), "CP"]
 
+# prune tree
 ctree_optimal <- prune(ctree, cp=optimalcp)
 
 rpart.plot(ctree_optimal)
 
 pi_hat <- predict(ctree_optimal, test.df, type="prob")[,"1"]
 
+# rocCurve
 ctree_rocCurve <- roc(response=test.df$FSWROUTY_bin,
                       predictor=pi_hat,
                       levels=c("0", "1"))
 
 plot(ctree_rocCurve, print.thres=TRUE, print.auc=TRUE)
 
-ctree_pi_star <- coords(rf_rocCurve, "best", ret="threshold")$threshold[1]
-
-test_preds <- test_preds %>% mutate(
-  ctree_preds = as.factor(ifelse(pi_hat > ctree_pi_star, "Yes", "No"))
-)
-
 ###########################################
+
+# train and test of x and y variables
 
 x_train <- model.matrix(FSWROUTY_bin ~ hhsize + married + education + elderly + kids 
                   + black + hispanic + female + faminc_cleaned
@@ -243,7 +186,7 @@ x_train <- model.matrix(FSWROUTY_bin ~ hhsize + married + education + elderly + 
 x_test <- model.matrix(FSWROUTY_bin ~ hhsize + married + education + elderly + kids 
                        + black + hispanic + female + faminc_cleaned
                        , data=test.df)[,-1]
-# y_train <- as.numeric(train.df$FSWROUTY_bin) - 1  # Convert factor (1, 2) to binary (0, 1)
+
 y_test <- as.vector(test.df$FSWROUTY_bin)
 y_train <- as.vector(train.df$FSWROUTY_bin)
 
@@ -252,6 +195,7 @@ y_train <- as.vector(train.df$FSWROUTY_bin)
 fswrouty_lasso <- cv.glmnet(x_train, y_train, family=binomial(link="logit"), alpha = 1)
 plot(fswrouty_lasso)
 best_lambda_lasso <- fswrouty_lasso$lambda.min
+
 coef(fswrouty_lasso, s="lambda.min") %>% as.matrix()
 
 lasso_model <- glmnet(x_train, y_train, family=binomial(link="logit"), 
@@ -277,13 +221,10 @@ plot(fswrouty_ridge)
 best_lambda_ridge <- fswrouty_ridge$lambda.min
 coef(fswrouty_ridge, s="lambda.min") %>% as.matrix()
 
-
 ridge_model <- glmnet(x_train, y_train, family=binomial(link="logit"), 
                                      alpha = 0, 
                                      lambda = best_lambda_lasso,
                                      weights = as.vector(train.df$weight))
-
-ridge_model %>% coef()
 
 # predict probability on the test set
 test_preds <- test.df %>% 
@@ -297,14 +238,6 @@ ridge_rocCurve <- roc(response = as.factor(test_preds$FSWROUTY_bin),
 plot(ridge_rocCurve, print.thres=TRUE, print.auc=TRUE)
 
 ########## COMBINE ROC CURVE ################
-
-#make data frame of MLE ROC info
-mle_data_fswrouty <- data.frame(
-  Model = "MLE",
-  Specificity = mle_fswrouty_rocCurve$specificities,
-  Sensitivity = mle_fswrouty_rocCurve$sensitivities,
-  AUC = as.numeric(mle_fswrouty_rocCurve$auc)
-)
 
 #make data frame of Firths ROC info
 firths_data_fswrouty <- data.frame(
@@ -359,9 +292,13 @@ ggplot() +
   theme_minimal()
 
 ##################################################################
+
 ############# ACS ##############
 
+# load acs data
 source("./code/clean_acs.R")
+
+#Transform acs in the same way that we did for CPS to make the data identitcal.
 acs_reduced_test = acs_data %>% 
   select(x_vars) 
 
@@ -378,13 +315,12 @@ acs_predicted <- acs_data %>% mutate(
   fswrouty_probs = fswrouty_predictions
 )
 
+# predict on only seniors
 acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
 
 # percentage of senior having food anxiety
 weighted.mean(acs_predicted_only_seniors$fswrouty_probs, acs_predicted_only_seniors$weight)
 
-
-#How does this adjust with the weights
 summary_by_PUMA <- acs_predicted_only_seniors %>% group_by(PUMA = as.factor(PUMA)) %>% 
   summarise(
     sample_size = sum(hhsize),
@@ -394,6 +330,7 @@ summary_by_PUMA <- acs_predicted_only_seniors %>% group_by(PUMA = as.factor(PUMA
     one_senior = sum(ifelse(elderly == hhsize & hhsize == 1, 1, 0)) #only 1 senior in the house
   ) %>% as.data.frame() %>% arrange(desc(proportion_on_assistance))
 
+#Loading in the Iowa PUMA shape data
 #https://www.geoplatform.gov/metadata/258db7ce-2581-4488-bb5e-e387b6119c7a
 sf_data <- st_read("./data/tl_2023_19_puma20/tl_2023_19_puma20.shp")
 
@@ -421,6 +358,7 @@ senior_data <- senior_data %>% mutate(
   seniors_with_fswrouty = floor(proportion_on_assistance*senior_population)
 ) 
 
+# Map of seniors in Iowa by PUMA
 ggplot(data = senior_data) +
   geom_sf(aes(fill = senior_population)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
@@ -428,7 +366,7 @@ ggplot(data = senior_data) +
   labs(title = "Total Population of Seniors by PUMA",
        fill = "Population of\nSeniors")
 
-#Predicted number of seniors anxiety
+# Predicted number of seniors with food anxiety
 ggplot(data = senior_data) +
   geom_sf(aes(fill = seniors_with_fswrouty)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
@@ -437,12 +375,13 @@ ggplot(data = senior_data) +
        fill = "Predicted number\nof Seniors\nwith Food Anxiety")
 
 
-#-------- Prediction on Single Senior Household 
+############# Prediction on Single Senior Household ###################
 
 single_senior_data <- senior_data %>% mutate(
   single_senior_with_fswrouty = floor(proportion_on_assistance*one_senior)
 ) 
 
+# population of single senior households
 ggplot(data = senior_data) +
   geom_sf(aes(fill = one_senior)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
@@ -450,7 +389,7 @@ ggplot(data = senior_data) +
   labs(title = "Total Population of Single-Senior Households by PUMA",
        fill = "Single Senior\nHouseholds")
 
-#Predicted number of single senior household with food anxiety
+# Predicted number of single senior household with food anxiety
 ggplot(data = single_senior_data) +
   geom_sf(aes(fill = single_senior_with_fswrouty)) +
   scale_fill_viridis_c(option = "plasma") +  # Adjust color palette as needed
@@ -458,8 +397,8 @@ ggplot(data = single_senior_data) +
   labs(title = "Predicted Food Anxiety in Single-Senior Households by PUMA",
        fill = "Predicted Single\nSenior w Food Anxiety")
 
-#------ Slides Interpretation
-head(acs_predicted_only_seniors)
+######### Slides Interpretation
+
 weighted.mean(acs_predicted_only_seniors$fswrouty_probs, acs_predicted_only_seniors$weight)
 # 0.4790557, this is the overall prop of seniors predicted to have food anxiety.
 
@@ -467,9 +406,9 @@ coef(fswrouty_ridge, s="lambda.min") %>% as.matrix()
 #The elderly coefficient here is -0.20418350 for every 1 elderly, the odds of
 #having food anxiety decrease by 18.47%.
 
-########## VISUALIZATION ############
+########## MORE VISUALIZATION ############
 
-### visualization of household with food anxiety
+### visualization of household with seniors having food anxiety ###
 
 # Calculate total households with seniors
 total_households_with_seniors <- sum(summary_by_PUMA$has_senior)
@@ -495,7 +434,7 @@ anxiety_proportions <- data.frame(
   )
 )
 
-# Visualization
+# Plot 
 ggplot(anxiety_proportions, aes(x = Category, y = Proportion, fill = Category)) +
   geom_bar(stat = "identity") +
   labs(
@@ -508,8 +447,9 @@ ggplot(anxiety_proportions, aes(x = Category, y = Proportion, fill = Category)) 
   theme_minimal()
 
 
-### stacked bar visualization of different senior groups
+### Stacked bar visualization of different senior groups ####
 total_sample_size <- nrow(acs_data)
+
 elderly_summary <- data.frame(
   Category = c("Households with seniors",
                "Households with seniors",

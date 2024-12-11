@@ -1,3 +1,8 @@
+# Description: Below is the code to understand X-variables better by doing
+# clustering. Then, using the clusters to build the model
+# Result: We found that this methods do not work well, but still keep the code
+# to get x-variable clusters anytime.
+
 rm(list=ls())
 
 library(tidyverse)
@@ -175,25 +180,4 @@ ridge_rocCurve <- roc(response = as.factor(test_preds$FSWROUTY_bin),
                       levels = c("0", "1"))
 
 plot(ridge_rocCurve, print.thres=TRUE, print.auc=TRUE)
-
-
-############# RANDOM FOREST ###################
-
-rf_fswrouty <- randomForest(FSWROUTY_bin ~ h_cluster,
-                            data = train.df,
-                            ntree = 1000,
-                            mtry = 3,
-                            importance = TRUE)
-
-# Validate model as predictive tool
-
-pi_hat <- predict(rf_fswrouty, test.df, type = "prob")[, "Yes"] #Choose positive event column
-
-rocCurve <- roc(response = test.df$FSWROUTY_bin,
-                predictor = pi_hat,
-                levels = c("No", "Yes"))
-
-plot(rocCurve, print.thres = TRUE, print.ouc = TRUE)
-
-auc(rocCurve)
 
