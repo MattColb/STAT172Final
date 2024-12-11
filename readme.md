@@ -1,4 +1,4 @@
-This contains some basic info for how to run our code. We each have our own readme file, but for the purposes of _, _.
+This contains some basic info for how to run our code. We each have our own readme file, but for the purposes of separating our individual readmes, we created this as a temporary way of informing how to run our code.
 
 ## Packages
 
