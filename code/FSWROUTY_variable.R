@@ -346,6 +346,7 @@ ggplot(data = map_data) +
   theme_minimal() +
   labs(title = "Proportion of Households",
        fill = "Proportion on\nFood Anxiety")
+ggsave("figures/fswrouty_proportion_of_households.png", width=6, height=5)
 
 #Load in Senior Data
 senior_data <- read.csv("./data/total_iowa_seniors_by_puma.csv")
@@ -373,6 +374,7 @@ ggplot(data = senior_data) +
   theme_minimal() +
   labs(title = "Predicted Seniors w Food Anxiety by PUMA",
        fill = "Predicted number\nof Seniors\nwith Food Anxiety")
+ggsave("figures/proportion_of_seniors_with_food_anxiety.png", width=6, height=5)
 
 
 ############# Prediction on Single Senior Household ###################
@@ -388,6 +390,7 @@ ggplot(data = senior_data) +
   theme_minimal() +
   labs(title = "Total Population of Single-Senior Households by PUMA",
        fill = "Single Senior\nHouseholds")
+ggsave("figures/acs_total_senior_single_households.png", width=6, height=5)
 
 # Predicted number of single senior household with food anxiety
 ggplot(data = single_senior_data) +
@@ -396,6 +399,7 @@ ggplot(data = single_senior_data) +
   theme_minimal() +
   labs(title = "Predicted Food Anxiety in Single-Senior Households by PUMA",
        fill = "Predicted Single\nSenior w Food Anxiety")
+ggsave("figures/acs_predicted_food_anxiety_single_senior_households.png", width=6, height=5)
 
 ######### Slides Interpretation
 
@@ -445,6 +449,7 @@ ggplot(anxiety_proportions, aes(x = Category, y = Proportion, fill = Category)) 
   ) +
   scale_fill_brewer(palette = "Dark2") +
   theme_minimal()
+ggsave("figures/fswrouty_proportion_of_senior_households.png", width=6, height=5)
 
 
 ### Stacked bar visualization of different senior groups ####
@@ -479,5 +484,5 @@ ggplot(elderly_summary, aes(x = Category, y = Count, fill = Type)) +
   ) +
   scale_fill_brewer(palette = "Dark2") +
   theme_minimal()
-
+ggsave("figures/households_with_seniors_composition.png", width=6, height=5)
 

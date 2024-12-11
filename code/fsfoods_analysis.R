@@ -28,7 +28,7 @@ source("./code/clean_acs.R")
 #FSFOODS is 1 if Not Enough, 0 if Enough
 
 #Can add or remove including all squared and interaction terms, but
-#Found that in fsstmp, this didn't improve our model much. So keep term = FALSE.
+#Found that in fsfoods, this didn't improve our model much. So keep term = FALSE.
 include_squared_interaction = FALSE
 
 cps_data <- cps_data %>% mutate(
