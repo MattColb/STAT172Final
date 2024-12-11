@@ -212,12 +212,28 @@ ridge_fsstmp_rocCurve <- roc(response = as.factor(test.df.preds$FSSTMPVALC_bin),
                              levels=c("0", "1"))
 
 plot(ridge_fsstmp_rocCurve, print.thres=TRUE, print.auc=TRUE) #AUC = .888 (.802, .837)
-#Predict no snap 80.2% of the time it actually happens
-#Predict snap 83.7% of the time it actually happens
+#Specificity: When someone is on SNAP, our model correctly predicts that they are on
+#snap 80.2% of the time.
+#Sensitivity: When someone is not on SNAP, our model correcly predicts that
+#they aren't on SNAP 83.7% of the time. 
 
 ridge_fsstmp_pi_star <- coords(ridge_fsstmp_rocCurve, "best", ref="threshold")$threshold[1]
 
+##############################################
+# Some interpretations of best model (Ridge) #
+##############################################
 
+#For every one increase in the number of people in the household, the odds that
+#the household is on SNAP increase by about 11%.
+#For every woman added to the household, the odds that the household is on SNAP increase
+#by about 27%
+#The odds of someone who makes between 5000-7499 per year being on SNAP is
+#about 3.9 times the odds of someone who makes 
+#For every elderly person added to the household, the odds that they are on SNAP decrease
+#by about 9%. 
+#That is, the odds for a house with one elderly person to receive SNAP 
+#is .09 times the odds of a house with no elderly people holding all other factors
+#constant
 
 #########################
 #     Random Forest     #
@@ -436,6 +452,7 @@ map_data <- sf_data %>%
   left_join(summary_by_PUMA, by = "PUMA")
 
 #Proportion of seniors that are on SNAP/Food Stamps
+#The Chloropleth map was created with the help of Generative AI
 ggplot(data = map_data) +
   geom_sf(aes(fill = proportion_on_assistance)) +
   scale_fill_viridis_c(option = "plasma") + 

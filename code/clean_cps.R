@@ -58,7 +58,10 @@ cps_data <- cps %>% group_by(CPSID=as.factor(CPSID)) %>%
     education = sum(EDUC),
     married = sum(MARRIED),
     faminc = first(FAMINC),
-    donut = as.factor(ifelse(hhsize == (elderly+kids), 1, 0))
+    donut = as.factor(ifelse(hhsize == (elderly+kids), 1, 0)) #This ended up being
+    #is the house have only kids and elderly, not requiring one of both,
+    #but it still worked pretty well to signify homes that only had elderly people
+    #a lot of the time.
   ) %>% ungroup()
 
 cps_data <- cps_data %>% mutate(
