@@ -308,7 +308,7 @@ ggplot() +
   labs(x = "1 - Specificity", y = "Sensitivity", color = "Model") +
   theme_minimal()
 
-#Then, compare performance on the ACS data suing lasso: this is our best model
+#Then, compare performance on the ACS data using lasso: this is our best model
 #with an AUC of 0.729.
 #Get the lasso pi star
 lasso_fsfoods_pi_star <- coords(lasso_rocCurve, "best", ref="threshold")$threshold[1]
@@ -387,7 +387,8 @@ ggplot(data = senior_data) +
   labs(title = "Predicted Seniors w/o Enough Food",
        fill = "Predicted number\nof Seniors w/o\nEnough Food")
 ggsave("figures/preidcted_seniors_fsfoods.png", width=6, height=5)
-#Model-Specific Predictions and Plots for Analysis
+
+#----Model-Specific Predictions and Plots for Analysis----
 
 plotting_data <- cps_data_f %>% mutate(
   sum_of_food_insecurity = FSFOODS + FSWROUTY + FSSTMPVALC_bin,
@@ -443,5 +444,5 @@ weighted.mean(elderly_cps$FSFOODS >0, elderly_cps$weight)
 
 
 -0.10972093+1.06139167-0.41141270 #0.540258
-exp(0.540258)/ (1+exp(0.540258)) #0.63187 
+exp(0.540258)/ (1+exp(0.540258)) #0.63187, 63% probability
 
