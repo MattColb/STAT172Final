@@ -308,7 +308,7 @@ ggplot() +
   labs(x = "1 - Specificity", y = "Sensitivity", color = "Model") +
   theme_minimal()
 
-#Then, compare performance on the ACS data suing lasso: this is our best model
+#Then, compare performance on the ACS data using lasso: this is our best model
 #with an AUC of 0.729.
 #Get the lasso pi star
 lasso_fsfoods_pi_star <- coords(lasso_rocCurve, "best", ref="threshold")$threshold[1]
@@ -346,7 +346,7 @@ colnames(sf_data)[colnames(sf_data) == "GEOID20"] = "PUMA"
 
 map_data <- sf_data %>%
   left_join(summary_by_PUMA, by = "PUMA")
-
+map_data$NAMELSAD20
 #proportion of GENERAL households without enough food
 ggplot(data = map_data) +
   geom_sf(aes(fill = proportion_on_assistance)) +
@@ -354,14 +354,15 @@ ggplot(data = map_data) +
   theme_minimal() +
   labs(title = "Proportion of Households without Enough Food",
        fill = "Proportion without\nEnough Food")
+ggsave("figures/fsfoods_proportion_of_general_households.png", width=6, height=5)
 
 #Load in Senior Data
-acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
+fsfood_acs_predicted_only_seniors <- acs_predicted[acs_predicted$elderly > 0,]
 
 #write to csv file for further analysis
-write.csv(acs_predicted_only_seniors, "./data/fsfoods_prediction.csv")
+write.csv(fsfood_acs_predicted_only_seniors, "./data/fsfoods_prediction.csv")
 
-senior_data <- read.csv("./data/iowa_seniors_by_puma.csv")
+senior_data <- read.csv("./data/total_iowa_seniors_by_puma.csv")
 
 senior_data <- senior_data %>% mutate("PUMA" = as.character(GEOID))
 
@@ -377,6 +378,7 @@ ggplot(data = senior_data) +
   labs(title = "Total Population of Seniors by PUMA",
        fill = "Population of\nSeniors")
 
+
 #Predicted number of SENIORS without enough food
 ggplot(data = senior_data) +
   geom_sf(aes(fill = seniors_with_fsfoods)) +
@@ -384,8 +386,9 @@ ggplot(data = senior_data) +
   theme_minimal() +
   labs(title = "Predicted Seniors w/o Enough Food",
        fill = "Predicted number\nof Seniors w/o\nEnough Food")
+ggsave("figures/preidcted_seniors_fsfoods.png", width=6, height=5)
 
-#Model-Specific Predictions and Plots for Analysis
+#----Model-Specific Predictions and Plots for Analysis----
 
 plotting_data <- cps_data_f %>% mutate(
   sum_of_food_insecurity = FSFOODS + FSWROUTY + FSSTMPVALC_bin,
@@ -412,8 +415,8 @@ head(acs_predicted$fsfoods_prop_preds)
 weighted.mean(acs_predicted$fsfoods_prop_preds, acs_predicted$weight)
 #0.1564382, this is the overall proportion of the state predicted to be without enough food.
 
-head(acs_predicted_only_seniors)
-weighted.mean(acs_predicted_only_seniors$fsfoods_prop_preds, acs_predicted_only_seniors$weight)
+head(fsfood_acs_predicted_only_seniors)
+weighted.mean(fsfood_acs_predicted_only_seniors$fsfoods_prop_preds, fsfood_acs_predicted_only_seniors$weight)
 #0.09212924, this is the overall prop of seniors predicted to be w/o enough food.
 
 lr_lasso_coefs <- coef(fsfoods_lasso_f1, s = "lambda.min") %>% as.matrix()
@@ -428,3 +431,18 @@ weighted.mean(cps_data_f$FSFOODS >0, cps_data_f$weight)
 elderly_cps <- subset(cps_data_f, cps_data_f$elderly > 0)
 weighted.mean(elderly_cps$FSFOODS >0, elderly_cps$weight)
 #0.1879351
+
+#Predicting a specific individual:
+#Coefficients
+#black                        0.19681189*0
+#elderly                     -0.10972093
+#female                       0.17185938*0
+#married                     -0.17834537*0
+#education                   -0.28476890*0
+#faminc_cleaned10000-12499    1.06139167
+#donut1                      -0.41141270
+
+
+-0.10972093+1.06139167-0.41141270 #0.540258
+exp(0.540258)/ (1+exp(0.540258)) #0.63187, 63% probability
+
